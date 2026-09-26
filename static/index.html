@@ -307,6 +307,10 @@
               <div id="callTimer" class="num text-2xl text-slate-100">00:00</div>
             </div>
             <div id="callWave" class="wave mt-3" aria-hidden="true"></div>
+            <div id="callControls" class="mt-3 flex items-center gap-3" hidden>
+              <button id="callMicBtn" type="button" class="btn-ghost" aria-pressed="true">Mic on</button>
+              <span class="text-[11px] text-slate-500">You speak as the customer · use headphones</span>
+            </div>
           </div>
           <div id="captionsWrap" class="max-h-[440px] overflow-y-auto px-5 py-4" aria-live="polite">
             <div id="captionsEmpty" class="text-xs text-slate-500">Waiting for the first words…</div>
@@ -369,7 +373,10 @@ const MOCK = params.get('mock') === '1' || location.protocol === 'file:';
 const API = {
   run: '/api/run',
   resume: '/api/agent/resume',
-  callStream: '/api/call/stream',
+  callStart: '/api/call/start',       // {run_id} → {call_id}
+  callStream: '/api/call/stream',     // ?call_id= → SSE of run events (call_transcript, call_event, call_audio, call_outcome, …)
+  callAudio: '/api/call/audio',       // {call_id, audio_base64}: 16 kHz mono PCM16 from the mic
+  callSimulate: '/api/call/simulate', // {run_id, conversation_outcome} → SSE; manual fallback
   reset: '/api/reset',
   receipt: '/api/receipt',
   trace: '/api/traces/latest',
@@ -458,7 +465,7 @@ function khataOf(e) {
   return { customer: src.customer_name || '', entries, confidence };
 }
 function parseLine(line) {
-  if (line && typeof line === 'object') return { role: line.role, content: line.content ?? line.text ?? '', en: line.en };
+  if (line && typeof line === 'object') return { role: line.role || (line.speaker === 'bot' ? 'bot' : 'user'), content: line.content ?? line.text ?? '', en: line.en };
   const m = /^\s*(user|bot|customer|agent|kaam|assistant)\s*:\s*([\s\S]*)$/i.exec(String(line ?? ''));
   if (!m) return { role: 'user', content: String(line ?? '') };
   const who = m[1].toLowerCase();
@@ -526,6 +533,10 @@ function describe(e) {
         return { title: `Call finished: ${parts.join(', ') || 'outcome recorded'}`, detail: `Spoke with ${contactName()} · outcome returned to KAAM` };
       }
       return { title: `Calling ${r.contact || contactName()} in ${langName(a.language || r.language) || 'their language'}`, detail: `Objective: confirm a payment date for ${inr(a.amount_due ?? r.amount_due)}` };
+    case 'call_outcome': {
+      const parts = outcomeParts(r);
+      return { title: `Call outcome extracted: ${parts.join(', ') || 'no commitment'}`, detail: `From ${(r.transcript_lines || []).length} transcript lines` };
+    }
     case 'record_commitment':
       return { title: `Commitment recorded: ${inr(r.amount ?? a.amount)} by ${dayDate(r.promised_date || a.promised_date)}`, detail: r.already_recorded ? `${r.id || ''} · already on file` : (r.id || '') };
     case 'schedule_followup':
@@ -814,7 +825,7 @@ function onAwaiting(ev) {
   setRunStatus('call');
   renderCentre();
   showCallPanel(ev);
-  if (S.source === 'live') connectCallStream();
+  if (S.source === 'live') startLiveCall(ev);
   else if (S.source === 'mock') playCall(MOCK_CALL, S.token);
   // replay drives the call itself
 }
@@ -861,7 +872,8 @@ async function onCompleted() {
 function showCallPanel(ev) {
   const cust = lastOk('find_customer')?.result || {};
   const lang = langName(ev.args?.language || ev.result?.language) || 'Tamil';
-  S.call = { lines: [], startedAt: null, timer: null, es: null, status: 'connecting' };
+  S.call = { lines: [], startedAt: null, timer: null, status: 'connecting', id: null, abort: null, mic: null, micOn: false, out: null, sendChain: null, sendFailed: false };
+  $('callControls').hidden = true;
   $('callPlaceholder').hidden = true;
   $('callPanel').hidden = false;
   $('callTitle').textContent = `Sarvam Voice Agent · ${lang}`;
@@ -883,7 +895,7 @@ function setCallStatus(s) {
   S.call.status = s;
   const map = {
     connecting: ['chip-amber', 'Connecting…'], live: ['chip-emerald', '<span class="dot-live"></span>Live'], ended: ['', 'Call ended'],
-    unavailable: ['chip-rose', 'Live stream unavailable'], sent: ['chip-sky', 'Outcome sent'],
+    unavailable: ['chip-rose', 'Live call unavailable'], sent: ['chip-sky', 'Outcome sent'],
   };
   const [cls, html] = map[s];
   $('callStatus').className = `chip ${cls} ml-auto`;
@@ -900,7 +912,6 @@ function handleCallMsg(m) {
     S.call.timer = setInterval(() => { $('callTimer').textContent = mmss((Date.now() - S.call.startedAt) / 1000); }, 250);
   } else if (m.event === 'interaction_end') {
     stopCallTimer();
-    if (S.call.es) { S.call.es.close(); S.call.es = null; }
     setCallStatus('ended');
     showOutcome(m.conversation_outcome || m.outcome || null);
   } else if (m.role) {
@@ -921,28 +932,153 @@ function addCaption(m) {
   $('captions').appendChild(li);
   const w = $('captionsWrap'); w.scrollTop = w.scrollHeight;
 }
-function connectCallStream() {
-  let connected = false;
-  let es;
-  try { es = new EventSource(API.callStream); } catch (e) { callUnavailable(e.message); return; }
-  S.call.es = es;
-  es.onmessage = msg => {
-    let d; try { d = JSON.parse(msg.data); } catch { return; }
-    if (d.event === 'connected') connected = true;
-    handleCallMsg(d);
-  };
-  es.onerror = () => {
-    if (!S.call || S.call.es !== es) return;
-    es.close(); S.call.es = null;
-    if (S.call.status === 'ended' || S.call.status === 'sent') return;
-    if (connected) handleCallMsg({ event: 'interaction_end' });
-    else callUnavailable(`could not open ${API.callStream}`);
-  };
+// Live call (call_api.py): start → stream → the backend extracts the outcome and resumes the run itself.
+async function startLiveCall(ev) {
+  const t = S.token;
+  let start;
+  try {
+    const r = await fetch(API.callStart, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ run_id: ev.run_id }) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}${await r.text().then(b => (b ? ': ' + b.slice(0, 300) : ''))}`);
+    start = await r.json();
+  } catch (e) { if (t === S.token) callUnavailable(`call could not start: ${e.message}`); return; }
+  if (t !== S.token || !S.call) return;
+  S.call.id = start.call_id;
+  S.call.abort = new AbortController();
+  handleCallMsg({ event: 'connected' }); // /api/call/start returns once the voice session is connected
+  startCallAudio(t);
+  try {
+    const res = await fetch(`${API.callStream}?call_id=${encodeURIComponent(start.call_id)}`, { signal: S.call.abort.signal, cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}${await res.text().then(b => (b ? ': ' + b.slice(0, 300) : ''))}`);
+    await readSSE(res, onCallEvent);
+  } catch (e) {
+    if (t !== S.token || e.name === 'AbortError') return;
+    stopCallAudio();
+    callUnavailable(`call stream failed: ${e.message}`);
+    return;
+  }
+  if (t !== S.token) return;
+  stopCallAudio();
+  await S.chain;
+  if (t !== S.token) return;
+  S.streamOpen = false; updateGhost();
+  if (!S.events.some(e => e.status === 'resumed') && !S.finished) callUnavailable('the call ended without an outcome');
+}
+function onCallEvent(ev) {
+  if (!S.call) return;
+  const r = ev.result || {};
+  switch (ev.tool) {
+    case 'call_audio': playCallAudio(r.audio_base64, r.sample_rate); return;
+    case 'call_event': {
+      const type = String(r.type || '');
+      if (type.endsWith('user_interrupt')) flushPlayback();
+      else if (type.endsWith('interaction_connected') && S.call.status !== 'live') handleCallMsg({ event: 'connected' });
+      return;
+    }
+    case 'call_transcript':
+      // Live lines have no run_id; the logged copies (with run_id) arrive after the resume and are deduped.
+      if (!ev.run_id) addCaption(parseLine(r.line)); else enqueue(ev);
+      return;
+    case 'call_outcome':
+      stopCallAudio(); stopCallTimer(); setCallStatus('ended');
+      S.streamOpen = true;
+      enqueue(ev);
+      return;
+    default:
+      enqueue(ev); // resumed + the rest of the run, or {tool: 'call', status: 'error'}
+  }
 }
 function callUnavailable(why) {
   setCallStatus('unavailable');
-  $('captionsEmpty').textContent = `No live captions (${why}). Enter the call outcome below to continue.`;
+  const heard = S.call?.lines.length > 0;
+  $('captionsEmpty').hidden = heard;
+  $('captionsEmpty').textContent = `No live call (${why}). Enter the call outcome below to continue.`;
+  if (heard) toast(`Live call stopped: ${why}`, 'error');
   showOutcome(null);
+}
+
+/* ---- call audio: mic → /api/call/audio (16 kHz PCM16), agent audio → speakers ---- */
+async function startCallAudio(t) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  S.call.out = { ctx: new AC(), at: 0, sources: [] };
+  S.call.out.ctx.resume?.();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    if (t !== S.token || !S.call || S.call.status !== 'live') { stream.getTracks().forEach(x => x.stop()); return; }
+    const ctx = new AC();
+    const src = ctx.createMediaStreamSource(stream);
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const silent = ctx.createGain(); silent.gain.value = 0;
+    src.connect(proc); proc.connect(silent); silent.connect(ctx.destination);
+    proc.onaudioprocess = e => { if (S.call?.micOn) sendMicChunk(toPcm16k(e.inputBuffer.getChannelData(0), ctx.sampleRate)); };
+    S.call.mic = { stream, ctx, proc };
+    S.call.micOn = true;
+    $('callControls').hidden = false;
+    updateCallMic();
+  } catch (e) {
+    toast(`Microphone unavailable for the call: ${e.name}: ${e.message}`, 'error');
+  }
+}
+function toPcm16k(input, rate) {
+  const ratio = rate / 16000, n = Math.floor(input.length / ratio), out = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(input.length, Math.floor((i + 1) * ratio));
+    let sum = 0; for (let j = a; j < b; j++) sum += input[j];
+    const v = Math.max(-1, Math.min(1, sum / Math.max(1, b - a)));
+    out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  return out;
+}
+function bytesToB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function sendMicChunk(pcm) {
+  const c = S.call;
+  if (!c?.id || c.sendFailed || !pcm.length) return;
+  const body = JSON.stringify({ call_id: c.id, audio_base64: bytesToB64(new Uint8Array(pcm.buffer)) });
+  // Sequential posts keep the audio in order.
+  c.sendChain = (c.sendChain || Promise.resolve())
+    .then(() => fetch(API.callAudio, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }))
+    .then(r => { if (!r.ok) { c.sendFailed = true; if (r.status !== 404) toast(`Sending call audio failed: HTTP ${r.status}`, 'error'); } })
+    .catch(() => { c.sendFailed = true; });
+}
+function playCallAudio(b64, rate) {
+  const out = S.call?.out;
+  if (!out || !b64) return;
+  let bytes = Uint8Array.from(atob(b64), ch => ch.charCodeAt(0));
+  if (bytes.length > 44 && String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF') bytes = bytes.subarray(44);
+  const n = bytes.length >> 1;
+  if (!n) return;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, n * 2);
+  const buf = out.ctx.createBuffer(1, n, num(rate) || 16000);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 0x8000;
+  const src = out.ctx.createBufferSource();
+  src.buffer = buf; src.connect(out.ctx.destination);
+  const at = Math.max(out.ctx.currentTime + 0.03, out.at);
+  src.start(at); out.at = at + buf.duration;
+  out.sources.push(src);
+  src.onended = () => { out.sources = out.sources.filter(x => x !== src); };
+}
+function flushPlayback() {
+  const out = S.call?.out;
+  if (!out) return;
+  for (const src of out.sources) { try { src.stop(); } catch { /* already stopped */ } }
+  out.sources = []; out.at = 0;
+}
+function stopCallAudio() {
+  const c = S.call;
+  if (!c) return;
+  c.micOn = false;
+  if (c.mic) { c.mic.proc.onaudioprocess = null; c.mic.stream.getTracks().forEach(x => x.stop()); c.mic.ctx.close(); c.mic = null; }
+  if (c.out) { // let queued agent speech finish, then release the device
+    const out = c.out; c.out = null;
+    setTimeout(() => out.ctx.close(), Math.max(0, (out.at - out.ctx.currentTime) * 1000) + 300);
+  }
+  $('callControls').hidden = true;
+}
+function updateCallMic() {
+  const on = !!S.call?.micOn;
+  $('callMicBtn').textContent = on ? 'Mic on' : 'Mic muted';
+  $('callMicBtn').setAttribute('aria-pressed', String(on));
+  $('callMicBtn').classList.toggle('text-rose-300', !on);
 }
 
 /* ================= Outcome → resume ================= */
@@ -980,17 +1116,38 @@ async function submitOutcome() {
   if (o.dispute) { o.disputed_amount = num($('ocDisputeAmt').value) || 0; o.dispute_reason = $('ocDisputeReason').value.trim(); }
   if (!date && !o.dispute) { $('ocErr').textContent = 'Enter the promised payment date (or mark a dispute).'; $('ocErr').hidden = false; return; }
   $('ocErr').hidden = true;
-  o.transcript_lines = (S.call?.lines || []).map(l => `${l.role}: ${l.content}`);
+  o.transcript_lines = (S.call?.lines || []).map(l => ({ speaker: l.role === 'bot' ? 'bot' : 'user', text: l.content }));
   setFormEnabled(false);
   const t = S.token;
   if (S.source === 'mock') { await playScript(mockPhase2(o), t); return; }
-  await streamPost(API.resume, {
+  if (S.call) { S.call.abort?.abort(); stopCallAudio(); }
+  const runId = S.awaiting?.run_id;
+  await streamPost(runId ? API.callSimulate : API.resume, {
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages: S.awaiting?.messages || [], conversation_outcome: o }),
+    body: JSON.stringify(runId ? { run_id: runId, conversation_outcome: o } : { messages: S.awaiting?.messages || [], conversation_outcome: o }),
   });
 }
 
 /* ================= Transports ================= */
+async function readSSE(res, onData) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+      const data = chunk.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).replace(/^ /, '')).join('\n');
+      if (!data) continue;
+      let obj;
+      try { obj = JSON.parse(data); } catch { console.warn('[KAAM] bad SSE payload', data); continue; }
+      onData(obj);
+    }
+  }
+}
 async function streamPost(url, init) {
   const t = S.token;
   S.abort = new AbortController();
@@ -1001,21 +1158,7 @@ async function streamPost(url, init) {
       const body = await res.text();
       throw new Error(`POST ${url} → HTTP ${res.status}${body ? ': ' + body.slice(0, 500) : ''}`);
     }
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true }).replace(/\r\n/g, '\n');
-      let i;
-      while ((i = buf.indexOf('\n\n')) >= 0) {
-        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-        const data = chunk.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).replace(/^ /, '')).join('\n');
-        if (!data) continue;
-        try { enqueue(JSON.parse(data)); } catch (e) { console.warn('[KAAM] bad SSE payload', data); }
-      }
-    }
+    await readSSE(res, enqueue);
   } catch (err) {
     if (t !== S.token || err.name === 'AbortError') return;
     enqueue({ step: null, tool: 'request', args: { url }, result: { error: err.message }, status: 'error', ts: new Date().toISOString() });
@@ -1288,7 +1431,7 @@ async function replayLatest() {
 function resetRun() {
   S.token++;
   if (S.abort) { S.abort.abort(); S.abort = null; }
-  if (S.call?.es) S.call.es.close();
+  if (S.call) { S.call.abort?.abort(); stopCallAudio(); }
   stopCallTimer();
   cancelAnimationFrame(S.balRaf);
   Object.assign(S, { source: null, events: [], chain: Promise.resolve(), streamOpen: false, awaiting: null, call: null, finished: false, balShown: null });
@@ -1503,6 +1646,7 @@ function init() {
 
   $('startBtn').onclick = startRun;
   $('resetBtn').onclick = resetDemo;
+  $('callMicBtn').onclick = () => { if (S.call?.mic) { S.call.micOn = !S.call.micOn; updateCallMic(); } };
   $('ocForm').addEventListener('submit', e => { e.preventDefault(); submitOutcome(); });
   $('ocDispute').addEventListener('change', e => { $('ocDisputeReason').hidden = !e.target.checked; });
 
