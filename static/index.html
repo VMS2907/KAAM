@@ -398,12 +398,25 @@ function dayDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   if (isNaN(d)) return iso;
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(d).map(x => [x.type, x.value]));
-  return `${p.weekday} ${p.day} ${p.month}, ${p.hour}:${p.minute} ${String(p.dayPeriod || '').toUpperCase()}`;
+  const p = istParts(d);
+  return `${DOW[p.dow]} ${p.day} ${MON[p.month - 1]}, ${p.hour12}:${p.minute} ${p.ampm}`;
 }
+// Calendar fields in India time; our own month/day names keep "Sep" consistent (en-IN says "Sept").
+function istParts(d) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: true })
+    .formatToParts(d).map(x => [x.type, x.value]));
+  return { year: +p.year, month: +p.month, day: +p.day, dow: DOW.indexOf(p.weekday), hour12: p.hour, minute: p.minute, ampm: String(p.dayPeriod || '').toUpperCase() };
+}
+function istStamp(d) { const p = istParts(d); return `${p.day} ${MON[p.month - 1]} ${p.year}, ${p.hour12}:${p.minute} ${p.ampm} IST`; }
 const clock = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }); };
 const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 function duration(ms) { if (!(ms >= 0)) return '—'; const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; }
+// Same as main.py: int(run_id without dashes [:10], 16) % 100000, zero-padded. Non-hex ids (mock) fall back to a hash.
+function receiptNo(runId, fallback) {
+  const hex = String(runId || '').replace(/-/g, '').slice(0, 10);
+  const n = /^[0-9a-f]{10}$/i.test(hex) ? parseInt(hex, 16) % 100000 : parseInt(hash5(runId || fallback), 36) % 100000;
+  return `K-${String(n).padStart(5, '0')}`;
+}
 function hash5(str) { let h = 0x811c9dc5; for (const ch of String(str)) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36).toUpperCase().padStart(5, '0').slice(-5); }
 function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
 
@@ -723,6 +736,7 @@ function renderCentre() {
 function animateBalance(from, to) {
   cancelAnimationFrame(S.balRaf);
   const el = $('balAmt'); if (!el) return;
+  if (document.hidden) { S.balShown = to; el.textContent = inr(to); return; }
   el.classList.remove('bal-flash'); void el.offsetWidth; el.classList.add('bal-flash');
   const t0 = performance.now(), dur = 1400;
   const step = now => {
@@ -782,8 +796,8 @@ function renderMetrics() {
 }
 function countTo(el, to, fmt) {
   const from = el._v || 0;
-  if (from === to) { el.textContent = fmt(to); return; }
   cancelAnimationFrame(el._raf);
+  if (from === to || document.hidden) { el.textContent = fmt(to); el._v = to; return; }
   const t0 = performance.now();
   const step = now => {
     const p = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - p, 3);
@@ -798,6 +812,7 @@ function countTo(el, to, fmt) {
 function onAwaiting(ev) {
   S.awaiting = ev;
   setRunStatus('call');
+  renderCentre();
   showCallPanel(ev);
   if (S.source === 'live') connectCallStream();
   else if (S.source === 'mock') playCall(MOCK_CALL, S.token);
@@ -1120,7 +1135,7 @@ function mockTrace() {
 function renderReceipt(events, meta = {}) {
   const done = t => doneOf(events, t);
   const runId = events.find(e => e.run_id)?.run_id || '';
-  const rid = meta.id && /^#?K-/i.test(meta.id) ? String(meta.id).replace(/^#/, '') : `K-${hash5(runId || JSON.stringify(events))}`;
+  const rid = meta.id && /^#?K-/i.test(meta.id) ? String(meta.id).replace(/^#/, '') : receiptNo(runId, JSON.stringify(events));
   const stt = instructionEvent(events);
   const khataEv = khataEvent(events);
   const k = khataOf(khataEv);
@@ -1179,7 +1194,7 @@ function renderReceipt(events, meta = {}) {
       <div>
         <div class="eyebrow">Proof of Work</div>
         <div class="num mt-1 text-2xl font-semibold text-white sm:text-3xl">#${esc(rid)}</div>
-        <div class="num mt-1 text-[11px] text-slate-500">${esc([runId && `run ${runId}`, !isNaN(firstTs) && new Date(firstTs).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST'].filter(Boolean).join(' · '))}</div>
+        <div class="num mt-1 text-[11px] text-slate-500">${esc([runId && `run ${runId}`, !isNaN(firstTs) && istStamp(new Date(firstTs))].filter(Boolean).join(' · '))}</div>
       </div>
       <div class="stamp ml-auto ${final[0]}">${final[1]}</div>
     </div>
