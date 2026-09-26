@@ -1,0 +1,431 @@
+{
+  "run_id": "demo-run",
+  "status": "completed",
+  "events": [
+    {
+      "run_id": "demo-run",
+      "step": 1,
+      "tool": "stt",
+      "args": {
+        "filename": "sample_audio.wav",
+        "mode": "codemix"
+      },
+      "result": {
+        "model": "saaras:v3",
+        "mode": "codemix",
+        "transcript": "Sample Customer Payment Check Please",
+        "language_code": "en-IN"
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:01.483550+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 2,
+      "tool": "extract",
+      "args": {
+        "filename": "sample_khata.png",
+        "language": "en-IN"
+      },
+      "result": {
+        "status": "completed",
+        "result": {
+          "customer_name": "Sample Customer",
+          "entries": [
+            {
+              "date": "2026-08-17",
+              "description": "Invoice DEMO-INVOICE",
+              "amount": 10000,
+              "type": "invoice"
+            },
+            {
+              "date": "2026-09-12",
+              "description": "Cash received",
+              "amount": 2000,
+              "type": "cash_received"
+            }
+          ]
+        },
+        "annotations": {
+          "customer_name": {
+            "confidence": 0.9999998807907508,
+            "sources": [
+              {
+                "page_num": 1,
+                "document_id": "demo-run",
+                "filename": "sample_khata.png"
+              }
+            ]
+          },
+          "entries": [
+            {
+              "date": {
+                "confidence": 0.9999999880790724,
+                "normalized_value": "2026-08-17",
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              },
+              "description": {
+                "confidence": 1,
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              },
+              "amount": {
+                "confidence": 1,
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              },
+              "type": {
+                "confidence": 0.9999965429424904,
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              }
+            },
+            {
+              "date": {
+                "confidence": 0.9999999403953652,
+                "normalized_value": "2026-09-12",
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              },
+              "description": {
+                "confidence": 0.9999998807907389,
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              },
+              "amount": {
+                "confidence": 1,
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              },
+              "type": {
+                "confidence": 0.9999999205271592,
+                "sources": [
+                  {
+                    "page_num": 1,
+                    "document_id": "demo-run",
+                    "filename": "sample_khata.png"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "field_confidence": {
+          "customer_name": 0.9999998807907508,
+          "entries": [
+            {
+              "date": 0.9999999880790724,
+              "description": 1,
+              "amount": 1,
+              "type": 0.9999965429424904
+            },
+            {
+              "date": 0.9999999403953652,
+              "description": 0.9999998807907389,
+              "amount": 1,
+              "type": 0.9999999205271592
+            }
+          ]
+        }
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:07.787691+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 3,
+      "tool": "find_customer",
+      "args": {
+        "name": "Sample Customer"
+      },
+      "result": {
+        "id": "DEMO-CUSTOMER",
+        "name": "Sample Customer",
+        "contact": "Sample Contact",
+        "phone": "redacted",
+        "language": "ta-IN",
+        "owner_id": "T2"
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:08.403236+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 4,
+      "tool": "get_ledger",
+      "args": {
+        "customer_id": "DEMO-CUSTOMER"
+      },
+      "result": {
+        "customer_id": "DEMO-CUSTOMER",
+        "invoices": [
+          {
+            "id": "DEMO-INVOICE",
+            "customer_id": "DEMO-CUSTOMER",
+            "amount": 10000,
+            "invoice_date": "2026-08-17",
+            "due_date": "2026-09-09",
+            "status": "unpaid",
+            "balance": 10000.0
+          }
+        ],
+        "payments": [],
+        "balance": 10000.0
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:08.916816+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 5,
+      "tool": "record_ledger_correction",
+      "args": {
+        "invoice_id": "DEMO-INVOICE",
+        "amount": 2000,
+        "date": "2026-09-12",
+        "source": "khata: handwritten cash_received entry",
+        "confidence": 0.9999999205271592
+      },
+      "result": {
+        "payment": {
+          "id": "DEMO-PAYMENT",
+          "invoice_id": "DEMO-INVOICE",
+          "customer_id": "DEMO-CUSTOMER",
+          "amount": 2000.0,
+          "date": "2026-09-12",
+          "source": "khata: handwritten cash_received entry",
+          "confidence": 0.9999999205271592
+        },
+        "before_balance": 10000.0,
+        "after_balance": 8000.0,
+        "already_recorded": false
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:10.497704+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 6,
+      "tool": "check_policy",
+      "args": {
+        "days_overdue": 17,
+        "balance": 8000.0,
+        "situation": "overdue collection"
+      },
+      "result": {
+        "rule_id": "R2",
+        "allowed_actions": [
+          "start_customer_conversation",
+          "record_commitment",
+          "schedule_followup",
+          "notify_owner"
+        ],
+        "description": "8-30 days overdue: KAAM may speak with customer and get a payment date",
+        "matched_rules": [
+          "R2"
+        ],
+        "contact_allowed": true,
+        "days_overdue": 17,
+        "balance": 8000.0
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:11.379831+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 7,
+      "tool": "start_customer_conversation",
+      "args": {
+        "customer_id": "DEMO-CUSTOMER",
+        "language": "ta-IN",
+        "objective": "Discuss the overdue invoice in Tamil and confirm a payment date",
+        "amount_due": 8000.0
+      },
+      "result": {
+        "status": "awaiting_conversation",
+        "customer_id": "DEMO-CUSTOMER",
+        "contact": "Sample Contact",
+        "language": "ta-IN",
+        "objective": "Discuss the overdue invoice in Tamil and confirm a payment date",
+        "amount_due": 8000.0
+      },
+      "status": "awaiting_conversation",
+      "ts": "2026-09-26T13:08:12.800525+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 8,
+      "tool": "start_customer_conversation",
+      "args": {},
+      "result": {
+        "promised_date": "2026-09-28",
+        "discount_requested": true,
+        "discount_amount": 500,
+        "dispute": false,
+        "transcript_lines": [
+          {
+            "speaker": "KAAM",
+            "text": "Payment date confirm pannunga.",
+            "source": "simulated_test"
+          },
+          {
+            "speaker": "Sample Contact",
+            "text": "Monday pay pannuren.",
+            "source": "simulated_test"
+          }
+        ]
+      },
+      "status": "resumed",
+      "ts": "2026-09-26T13:08:39.349627+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 9,
+      "tool": "call_transcript",
+      "args": {},
+      "result": {
+        "line": {
+          "speaker": "KAAM",
+          "text": "Payment date confirm pannunga.",
+          "source": "simulated_test"
+        }
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:39.349627+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 10,
+      "tool": "call_transcript",
+      "args": {},
+      "result": {
+        "line": {
+          "speaker": "Sample Contact",
+          "text": "Monday pay pannuren.",
+          "source": "simulated_test"
+        }
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:39.349627+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 11,
+      "tool": "record_commitment",
+      "args": {
+        "invoice_id": "DEMO-INVOICE",
+        "amount": 8000.0,
+        "promised_date": "2026-09-28"
+      },
+      "result": {
+        "id": "DEMO-COMMITMENT",
+        "invoice_id": "DEMO-INVOICE",
+        "amount": 8000.0,
+        "promised_date": "2026-09-28",
+        "recorded_at": "2026-09-26T13:08:41.014052+05:30",
+        "already_recorded": false
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:41.027244+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 12,
+      "tool": "schedule_followup",
+      "args": {
+        "invoice_id": "DEMO-INVOICE",
+        "datetime": "2026-09-28T18:00:00+05:30",
+        "condition": "If the promised payment has not been received"
+      },
+      "result": {
+        "id": "DEMO-FOLLOWUP",
+        "invoice_id": "DEMO-INVOICE",
+        "datetime": "2026-09-28T18:00:00+05:30",
+        "condition": "If the promised payment has not been received",
+        "status": "scheduled"
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:42.480332+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 13,
+      "tool": "assign_task",
+      "args": {
+        "member_id": "T1",
+        "task": "Review INR 500 discount request for DEMO-INVOICE; do not apply without approval",
+        "reason": "Customer requested a discount; KAAM cannot approve it",
+        "rule_id": "R4",
+        "evidence": "{\"invoice_id\": \"DEMO-INVOICE\", \"discount_requested\": true, \"discount_amount\": 500.0, \"conversation_outcome\": {\"promised_date\": \"2026-09-28\", \"discount_requested\": true, \"discount_amount\": 500, \"dispute\": false, \"transcript_lines\": [{\"speaker\": \"KAAM\", \"text\": \"Payment date confirm pannunga.\", \"source\": \"simulated_test\"}, {\"speaker\": \"Sample Contact\", \"text\": \"Monday pay pannuren.\", \"source\": \"simulated_test\"}]}}",
+        "due_at": "2026-09-28T17:00:00+05:30"
+      },
+      "result": {
+        "id": "DEMO-TASK",
+        "member_id": "T1",
+        "member_name": "Priya",
+        "task": "Review INR 500 discount request for DEMO-INVOICE; do not apply without approval",
+        "reason": "Customer requested a discount; KAAM cannot approve it",
+        "rule_id": "R4",
+        "evidence": "{\"invoice_id\": \"DEMO-INVOICE\", \"discount_requested\": true, \"discount_amount\": 500.0, \"conversation_outcome\": {\"promised_date\": \"2026-09-28\", \"discount_requested\": true, \"discount_amount\": 500, \"dispute\": false, \"transcript_lines\": [{\"speaker\": \"KAAM\", \"text\": \"Payment date confirm pannunga.\", \"source\": \"simulated_test\"}, {\"speaker\": \"Sample Contact\", \"text\": \"Monday pay pannuren.\", \"source\": \"simulated_test\"}]}}",
+        "due_at": "2026-09-28T17:00:00+05:30",
+        "depends_on": null,
+        "status": "assigned"
+      },
+      "status": "ok",
+      "ts": "2026-09-26T13:08:46.956203+05:30"
+    },
+    {
+      "run_id": "demo-run",
+      "step": 14,
+      "tool": "notify_owner",
+      "args": {
+        "summary_en": "I recorded the khata cash payment of INR 2,000 for Sample Customer, reducing DEMO-INVOICE from INR 10,000 to INR 8,000. The supplied customer conversation outcome records a promise to pay INR 8,000 on 2026-09-28, and a conditional follow-up was scheduled. A requested INR 500 discount was assigned to Priya under R4 for review; no discount was approved."
+      },
+      "result": {
+        "id": "DEMO-NOTIFICATION",
+        "owner": "Vyom",
+        "summary_en": "I recorded the khata cash payment of INR 2,000 for Sample Customer, reducing DEMO-INVOICE from INR 10,000 to INR 8,000. The supplied customer conversation outcome records a promise to pay INR 8,000 on 2026-09-28, and a conditional follow-up was scheduled. A requested INR 500 discount was assigned to Priya under R4 for review; no discount was approved.",
+        "created_at": "2026-09-26T13:08:49.166407+05:30",
+        "status": "recorded"
+      },
+      "status": "completed",
+      "ts": "2026-09-26T13:08:49.171055+05:30"
+    }
+  ]
+}

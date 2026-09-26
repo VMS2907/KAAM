@@ -1,0 +1,1512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KAAM · Operations Worker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+Tamil:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'Noto Sans Tamil', 'Nirmala UI', 'system-ui', 'sans-serif'],
+          mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  :root { color-scheme: dark; }
+  [hidden] { display: none !important; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 50% -200px, rgba(16, 185, 129, .07), transparent 70%),
+      #07090d;
+    color: #cbd5e1;
+  }
+  .panel {
+    background: linear-gradient(180deg, rgba(255,255,255,.028), rgba(255,255,255,.012));
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 14px;
+  }
+  .panel-h {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,.05);
+  }
+  .eyebrow { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #64748b; font-weight: 600; }
+  .num { font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 500;
+    border: 1px solid rgba(148,163,184,.25); color: #cbd5e1; background: rgba(148,163,184,.06);
+  }
+  .chip-emerald { border-color: rgba(52,211,153,.35); color: #6ee7b7; background: rgba(52,211,153,.08); }
+  .chip-amber   { border-color: rgba(251,191,36,.35); color: #fcd34d; background: rgba(251,191,36,.08); }
+  .chip-sky     { border-color: rgba(56,189,248,.35); color: #7dd3fc; background: rgba(56,189,248,.08); }
+  .chip-rose    { border-color: rgba(251,113,133,.4); color: #fda4af; background: rgba(251,113,133,.08); }
+  .chip-violet  { border-color: rgba(167,139,250,.35); color: #c4b5fd; background: rgba(167,139,250,.08); }
+  .dot-live { width: 7px; height: 7px; border-radius: 99px; background: currentColor; box-shadow: 0 0 0 0 currentColor; animation: ping 1.6s infinite; }
+  @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(52,211,153,.55); } 80%,100% { box-shadow: 0 0 0 7px rgba(52,211,153,0); } }
+
+  .field {
+    width: 100%; background: rgba(2,6,12,.6); border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; color: #e2e8f0; outline: none;
+  }
+  .field:focus { border-color: rgba(52,211,153,.6); box-shadow: 0 0 0 3px rgba(52,211,153,.12); }
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    background: #10b981; color: #03130d; font-weight: 600; border-radius: 10px; padding: 11px 22px;
+    transition: background .15s, opacity .15s, transform .1s;
+  }
+  .btn-primary:hover:not(:disabled) { background: #34d399; }
+  .btn-primary:active:not(:disabled) { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; color: #cbd5e1; background: rgba(255,255,255,.02);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,.06); }
+  :focus-visible { outline: 2px solid #34d399; outline-offset: 2px; }
+
+  /* Mic */
+  .mic-wrap { --lvl: 0; position: relative; width: 168px; height: 168px; display: grid; place-items: center; }
+  .mic-ring { position: absolute; inset: 0; border-radius: 999px; border: 1px solid rgba(52,211,153,.25); transition: transform .08s linear, opacity .2s; }
+  .mic-ring.r2 { inset: -18px; border-color: rgba(52,211,153,.12); }
+  .mic-wrap[data-state=rec] .mic-ring { border-color: rgba(251,113,133,.45); transform: scale(calc(1 + var(--lvl) * .35)); }
+  .mic-wrap[data-state=rec] .mic-ring.r2 { border-color: rgba(251,113,133,.2); transform: scale(calc(1 + var(--lvl) * .6)); }
+  .mic-btn {
+    position: relative; width: 132px; height: 132px; border-radius: 999px; display: grid; place-items: center;
+    background: radial-gradient(circle at 35% 30%, #1d2a2a, #0c1214 70%); border: 1px solid rgba(52,211,153,.4);
+    color: #6ee7b7; box-shadow: 0 0 60px -10px rgba(16,185,129,.35), inset 0 1px 0 rgba(255,255,255,.06);
+    transition: transform .12s, border-color .2s, color .2s, box-shadow .2s; touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  .mic-btn:hover { border-color: rgba(52,211,153,.7); }
+  .mic-wrap[data-state=rec] .mic-btn { transform: scale(.96); border-color: rgba(251,113,133,.7); color: #fda4af; box-shadow: 0 0 70px -8px rgba(244,63,94,.45); }
+  .mic-wrap[data-state=processing] .mic-btn { opacity: .6; }
+  .mic-wrap[data-state=ready] .mic-btn { border-color: rgba(52,211,153,.75); }
+
+  .drop { border: 1.5px dashed rgba(148,163,184,.25); transition: border-color .15s, background .15s; }
+  .drop.over, .drop:hover { border-color: rgba(52,211,153,.55); background: rgba(52,211,153,.03); }
+
+  /* Timeline */
+  .tl { position: relative; }
+  .tl::before { content: ''; position: absolute; left: 11px; top: 8px; bottom: 8px; width: 1px; background: linear-gradient(rgba(148,163,184,.28), rgba(148,163,184,.04)); }
+  .tl-node { position: relative; padding: 0 0 18px 38px; animation: rise .35s ease-out both; }
+  .tl-dot {
+    position: absolute; left: 0; top: 0; width: 23px; height: 23px; border-radius: 999px; display: grid; place-items: center;
+    font-size: 12px; font-weight: 700; background: #0b0f15; border: 1.5px solid #475569; color: #94a3b8; transition: all .25s;
+  }
+  .tl-node[data-state=pending] .tl-dot { border-style: dashed; }
+  .tl-node[data-state=running] .tl-dot { border-color: #38bdf8; }
+  .tl-node[data-state=running] .tl-dot::after { content: ''; width: 9px; height: 9px; border-radius: 99px; background: #38bdf8; animation: blink 1s ease-in-out infinite; }
+  .tl-node[data-state=await] .tl-dot { border-color: #fbbf24; }
+  .tl-node[data-state=await] .tl-dot::after { content: ''; width: 9px; height: 9px; border-radius: 99px; background: #fbbf24; animation: blink 1.2s ease-in-out infinite; }
+  .tl-node[data-state=done] .tl-dot { border-color: #34d399; background: rgba(52,211,153,.14); color: #6ee7b7; }
+  .tl-node[data-state=done] .tl-dot::after { content: '✓'; }
+  .tl-node[data-state=error] .tl-dot { border-color: #fb7185; background: rgba(251,113,133,.14); color: #fda4af; }
+  .tl-node[data-state=error] .tl-dot::after { content: '✕'; }
+  .tl-title { font-size: 13.5px; line-height: 1.4; color: #e2e8f0; }
+  .tl-node[data-state=pending] .tl-title { color: #64748b; }
+  .tl-node[data-state=error] .tl-title { color: #fda4af; }
+  .tl-detail { font-size: 12px; line-height: 1.45; color: #94a3b8; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .tl-meta { font: 10.5px 'JetBrains Mono', monospace; color: #475569; margin-top: 4px; }
+  .ghost .tl-dot { border-style: dashed; border-color: #334155; }
+  .ghost .tl-title { color: #64748b; }
+  .shimmer { background: linear-gradient(90deg, #475569 0%, #94a3b8 50%, #475569 100%); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent !important; animation: shimmer 1.8s linear infinite; }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @keyframes blink { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .45; transform: scale(.8); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .rise { animation: rise .4s ease-out both; }
+
+  /* Balance */
+  .bal-flash { animation: balflash 1.6s ease-out; }
+  @keyframes balflash { 0% { color: #6ee7b7; text-shadow: 0 0 24px rgba(52,211,153,.6); } 100% { color: #fff; text-shadow: none; } }
+
+  /* Call */
+  .wave { display: flex; align-items: center; gap: 3px; height: 26px; }
+  .wave span { flex: 1; min-width: 2px; height: 3px; border-radius: 2px; background: rgba(148,163,184,.25); }
+  .wave.live span { background: rgba(52,211,153,.7); animation: wave 1.1s ease-in-out infinite; }
+  @keyframes wave { 0%,100% { height: 3px; } 50% { height: var(--h, 18px); } }
+  .cap { animation: rise .35s ease-out both; }
+  .cap:not(:last-child) { opacity: .6; }
+
+  /* Receipt */
+  .receipt { position: relative; overflow: hidden; }
+  .receipt::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #10b981, #38bdf8 60%, #a78bfa); }
+  .r-row { display: grid; grid-template-columns: 170px minmax(0,1fr); gap: 20px; padding: 18px 0; border-top: 1px dashed rgba(148,163,184,.16); }
+  @media (max-width: 720px) { .r-row { grid-template-columns: 1fr; gap: 8px; } }
+  .stamp { border: 2px solid currentColor; border-radius: 8px; padding: 6px 12px; font: 700 13px 'JetBrains Mono', monospace; letter-spacing: .16em; transform: rotate(-4deg); }
+  table.t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.t th { text-align: left; font-weight: 500; color: #64748b; font-size: 11px; padding: 0 10px 6px 0; }
+  table.t td { padding: 6px 10px 6px 0; border-top: 1px solid rgba(255,255,255,.05); vertical-align: top; }
+
+  .toast { animation: rise .25s ease-out both; }
+  kbd { font: 11px 'JetBrains Mono', monospace; border: 1px solid rgba(255,255,255,.15); border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; color: #cbd5e1; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: rgba(148,163,184,.18); border-radius: 8px; }
+</style>
+</head>
+<body class="min-h-screen font-sans antialiased">
+
+<!-- ============ Top bar ============ -->
+<header class="sticky top-0 z-30 border-b border-white/5 bg-[#07090d]/85 backdrop-blur">
+  <div class="mx-auto flex h-16 max-w-[1440px] items-center gap-4 px-4 sm:px-6">
+    <div class="flex items-center gap-3">
+      <div class="grid h-9 w-9 place-items-center rounded-lg bg-emerald-400/10 font-mono text-sm font-semibold text-emerald-300 ring-1 ring-emerald-400/30">K</div>
+      <div class="leading-tight">
+        <div class="text-[15px] font-semibold tracking-[0.22em] text-white">KAAM</div>
+        <div class="text-[11px] text-slate-400">Bas bolo. KAAM ho jayega.</div>
+      </div>
+    </div>
+    <div class="hidden h-6 w-px bg-white/10 sm:block"></div>
+    <div id="sysStatus" class="hidden items-center gap-2 text-xs text-emerald-300 sm:flex">
+      <span class="dot-live"></span><span id="sysText">Systems online</span>
+    </div>
+    <span id="modeChip" class="chip hidden sm:inline-flex"></span>
+
+    <div class="ml-auto flex items-center gap-5 sm:gap-7">
+      <div class="text-right">
+        <div id="mConfirmed" class="num text-[15px] font-semibold text-white">₹0</div>
+        <div class="text-[10.5px] text-slate-500">₹ confirmed with date</div>
+      </div>
+      <div class="text-right">
+        <div id="mKhata" class="num text-[15px] font-semibold text-white">₹0</div>
+        <div class="text-[10.5px] text-slate-500">₹ found via khata</div>
+      </div>
+      <div class="text-right">
+        <div id="mHandoffs" class="num text-[15px] font-semibold text-white">0</div>
+        <div class="text-[10.5px] text-slate-500">open handoffs</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ Idle ============ -->
+  <section id="idleView" class="mx-auto max-w-5xl px-4 pb-24 pt-12 sm:px-6 sm:pt-16">
+    <div class="text-center">
+      <div class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-400">
+        AI operations worker · Noetos Pvt Ltd
+      </div>
+      <h1 class="mt-5 text-3xl font-semibold tracking-tight text-white sm:text-5xl">Bas bolo. <span class="text-emerald-300">KAAM ho jayega.</span></h1>
+      <p class="mx-auto mt-4 max-w-2xl text-[15px] leading-relaxed text-slate-400">
+        Give the instruction by voice, in any Indian language, and attach the khata page as evidence.
+        KAAM reconciles the ledger, checks the playbook, calls the customer and hands off what it isn't allowed to do.
+      </p>
+    </div>
+
+    <div class="mt-12 grid gap-5 md:grid-cols-[1.15fr_1fr]">
+      <!-- Mic -->
+      <div class="panel flex flex-col items-center px-6 py-9">
+        <div id="micWrap" class="mic-wrap" data-state="idle">
+          <span class="mic-ring r2"></span><span class="mic-ring"></span>
+          <button id="micBtn" type="button" class="mic-btn" aria-label="Hold to record the instruction">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/>
+            </svg>
+          </button>
+        </div>
+        <div id="micLabel" class="mt-6 text-sm font-medium text-slate-200">Hold to speak</div>
+        <div id="micMeta" class="num mt-1 text-[11px] text-slate-500">or hold <kbd>Space</kbd> · max 30s</div>
+        <div id="audioReady" class="mt-3 flex items-center gap-2" hidden>
+          <button id="audioPlay" type="button" class="btn-ghost">▶ Play</button>
+          <button id="audioClear" type="button" class="btn-ghost">Discard</button>
+        </div>
+        <p class="mt-6 max-w-sm text-center text-xs leading-relaxed text-slate-500">
+          e.g. “Murugan Traders ka payment check karo. Overdue hai toh Tamil mein baat karke date confirm karo.”
+        </p>
+      </div>
+
+      <!-- Khata -->
+      <label id="khataDrop" class="drop panel flex cursor-pointer flex-col items-center justify-center px-6 py-9 text-center">
+        <input id="khataInput" type="file" accept="image/png,image/jpeg" class="sr-only">
+        <div id="khataEmpty" class="flex flex-col items-center">
+          <div class="grid h-14 w-14 place-items-center rounded-xl border border-white/10 bg-white/[0.03] text-slate-400">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 5h16v14H4z"/><path d="M4 9h16M9 5v14"/><path d="M12 13h5M12 16h3"/>
+            </svg>
+          </div>
+          <div class="mt-4 text-sm font-medium text-slate-200">Khata photo</div>
+          <div class="mt-1 max-w-[240px] text-xs text-slate-500">Drop a photo of the handwritten ledger page, or click to browse. PNG or JPEG.</div>
+        </div>
+        <div id="khataPreview" class="flex w-full flex-col items-center" hidden>
+          <img id="khataImg" alt="Khata page preview" class="max-h-44 rounded-lg border border-white/10 object-contain">
+          <div id="khataName" class="num mt-3 max-w-full truncate text-[11px] text-slate-400"></div>
+          <div class="mt-1 text-[11px] text-emerald-300">✓ Evidence attached · click to replace</div>
+        </div>
+      </label>
+    </div>
+
+    <div class="mt-9 flex flex-col items-center gap-3">
+      <button id="startBtn" type="button" class="btn-primary min-w-[220px] text-[15px]" disabled>Start KAAM <span aria-hidden="true">→</span></button>
+      <div id="startHint" class="text-xs text-slate-500"></div>
+      <div class="text-[11px] text-slate-600">Press <kbd>D</kbd> to replay the last saved run</div>
+    </div>
+  </section>
+
+  <!-- ============ Running ============ -->
+  <section id="runView" class="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6" hidden>
+    <div class="panel flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+      <span class="eyebrow">Instruction</span>
+      <span id="instrText" class="min-w-0 flex-1 text-[15px] text-slate-100">Listening to the voice note…</span>
+      <span id="instrLang" class="chip" hidden></span>
+      <span id="runStatus" class="chip chip-sky"><span class="dot-live"></span>Running</span>
+      <span id="runMeta" class="num text-[11px] text-slate-500"></span>
+    </div>
+
+    <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_minmax(0,1fr)]">
+      <!-- Left: timeline -->
+      <div class="panel">
+        <div class="panel-h"><span class="eyebrow">Work timeline</span><span id="tlCount" class="num ml-auto text-[11px] text-slate-500"></span></div>
+        <div class="px-5 pb-2 pt-5">
+          <ol id="timeline" class="tl"></ol>
+          <div id="tlGhost" class="tl-node ghost" hidden>
+            <span class="tl-dot"></span>
+            <div class="tl-title shimmer" id="tlGhostText">Working…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Centre: customer + invoice + evidence -->
+      <div class="space-y-5">
+        <div id="centreEmpty" class="panel grid min-h-[220px] place-items-center p-8 text-center text-xs text-slate-500">
+          Customer and invoice appear here as KAAM finds them.
+        </div>
+        <div id="customerCard" class="panel" hidden></div>
+        <div id="invoiceCard" class="panel" hidden></div>
+        <div id="evidenceCard" class="panel" hidden></div>
+      </div>
+
+      <!-- Right: live call -->
+      <div>
+        <div id="callPlaceholder" class="panel grid min-h-[260px] place-items-center p-8 text-center">
+          <div>
+            <div class="mx-auto grid h-12 w-12 place-items-center rounded-full border border-white/10 text-slate-500">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>
+            </div>
+            <div class="mt-4 text-sm text-slate-300">Live call</div>
+            <div class="mx-auto mt-1 max-w-[240px] text-xs text-slate-500">KAAM calls only after the playbook allows contact. Live captions appear here.</div>
+          </div>
+        </div>
+
+        <div id="callPanel" class="panel overflow-hidden" hidden>
+          <div class="border-b border-white/5 px-5 pb-4 pt-4">
+            <div class="flex items-center gap-2">
+              <span class="eyebrow">Live call</span>
+              <span id="callStatus" class="chip chip-amber ml-auto">Connecting…</span>
+            </div>
+            <div class="mt-3 flex items-end justify-between gap-3">
+              <div class="min-w-0">
+                <div id="callTitle" class="text-[15px] font-semibold text-white">Sarvam Voice Agent</div>
+                <div id="callSub" class="truncate text-xs text-slate-400"></div>
+              </div>
+              <div id="callTimer" class="num text-2xl text-slate-100">00:00</div>
+            </div>
+            <div id="callWave" class="wave mt-3" aria-hidden="true"></div>
+          </div>
+          <div id="captionsWrap" class="max-h-[440px] overflow-y-auto px-5 py-4" aria-live="polite">
+            <div id="captionsEmpty" class="text-xs text-slate-500">Waiting for the first words…</div>
+            <ol id="captions" class="space-y-3.5"></ol>
+          </div>
+          <div id="outcomeBox" class="border-t border-white/5 bg-black/20 px-5 py-4" hidden>
+            <div class="flex items-center justify-between gap-2">
+              <span class="eyebrow">Call outcome</span>
+              <span id="ocNote" class="text-[11px] text-slate-500">Sent to KAAM to continue the run</span>
+            </div>
+            <form id="ocForm" class="mt-3 space-y-3" novalidate>
+              <label class="block text-xs text-slate-400">Promised payment date
+                <input id="ocDate" type="date" class="field num mt-1">
+              </label>
+              <div class="flex items-center gap-2 text-xs text-slate-300">
+                <input id="ocDiscount" type="checkbox" class="h-4 w-4 accent-emerald-500">
+                <label for="ocDiscount" class="flex-1">Discount requested</label>
+                <input id="ocDiscountAmt" type="number" min="0" step="500" placeholder="₹ amount" aria-label="Discount amount" class="field num w-28">
+              </div>
+              <div class="flex items-center gap-2 text-xs text-slate-300">
+                <input id="ocDispute" type="checkbox" class="h-4 w-4 accent-emerald-500">
+                <label for="ocDispute" class="flex-1">Part of the bill disputed</label>
+                <input id="ocDisputeAmt" type="number" min="0" step="500" placeholder="₹ amount" aria-label="Disputed amount" class="field num w-28">
+              </div>
+              <input id="ocDisputeReason" type="text" placeholder="Dispute reason (e.g. damaged delivery)" aria-label="Dispute reason" class="field" hidden>
+              <div id="ocErr" class="text-xs text-rose-300" hidden></div>
+              <button id="ocSubmit" type="submit" class="btn-primary w-full text-sm">Continue run →</button>
+            </form>
+            <div id="ocSummary" class="mt-3 flex flex-wrap gap-2" hidden></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Team board -->
+    <div class="panel">
+      <div class="panel-h">
+        <span class="eyebrow">Team board</span>
+        <span id="teamCount" class="num ml-auto text-[11px] text-slate-500"></span>
+      </div>
+      <div id="teamEmpty" class="px-5 py-6 text-xs text-slate-500">No handoffs yet. KAAM assigns work it isn't allowed to do to the right teammate, with evidence and a due time.</div>
+      <div id="teamGrid" class="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4" hidden></div>
+    </div>
+
+    <!-- Receipt -->
+    <div id="receipt" hidden></div>
+  </section>
+</main>
+
+<button id="resetBtn" type="button" class="btn-ghost fixed bottom-4 right-4 z-40 bg-[#0b0f15]/90 text-[11px] text-slate-400 backdrop-blur" title="Reset demo data and UI">↺ Reset demo</button>
+<div id="toasts" class="pointer-events-none fixed right-4 top-20 z-50 flex w-[min(380px,calc(100vw-32px))] flex-col gap-2"></div>
+
+<script>
+'use strict';
+
+/* ================= Config ================= */
+const params = new URLSearchParams(location.search);
+// Mock plays a scripted run with no backend. Everything else renders the same event objects.
+const MOCK = params.get('mock') === '1' || location.protocol === 'file:';
+const API = {
+  run: '/api/run',
+  resume: '/api/agent/resume',
+  callStream: '/api/call/stream',
+  reset: '/api/reset',
+  receipt: '/api/receipt',
+  trace: '/api/traces/latest',
+  ping: '/openapi.json',
+};
+// Multipart field names for POST /api/run (main.py: audio: UploadFile, image: UploadFile).
+const FORM_FIELDS = { audio: 'audio', image: 'image' };
+const MAX_REC_S = 30;
+
+/* ================= Helpers ================= */
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = v => { if (v === null || v === undefined || v === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
+const inr = v => { const n = num(v); return n === null ? '—' : '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 }); };
+const pct = v => { let n = num(v); if (n === null) return '—'; if (n <= 1) n *= 100; return Math.round(n) + '%'; };
+const inrText = s => String(s ?? '').replace(/INR\s?(\d[\d,]*(?:\.\d+)?)/g, '₹$1');
+const LANG = { 'ta-IN': 'Tamil', 'hi-IN': 'Hindi', 'en-IN': 'English', 'kn-IN': 'Kannada', 'te-IN': 'Telugu', 'ml-IN': 'Malayalam', 'mr-IN': 'Marathi', 'bn-IN': 'Bengali', 'gu-IN': 'Gujarati', 'pa-IN': 'Punjabi', 'od-IN': 'Odia' };
+const langName = c => LANG[c] || c || '';
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function parseDay(s) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+const shortDate = s => { const d = parseDay(s); return d ? `${d.getDate()} ${MON[d.getMonth()]}` : (s || '—'); };
+const dayDate = s => { const d = parseDay(s); return d ? `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}` : (s || '—'); };
+function dayDateTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true }).formatToParts(d).map(x => [x.type, x.value]));
+  return `${p.weekday} ${p.day} ${p.month}, ${p.hour}:${p.minute} ${String(p.dayPeriod || '').toUpperCase()}`;
+}
+const clock = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }); };
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+function duration(ms) { if (!(ms >= 0)) return '—'; const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; }
+function hash5(str) { let h = 0x811c9dc5; for (const ch of String(str)) { h ^= ch.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36).toUpperCase().padStart(5, '0').slice(-5); }
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+
+function toast(msg, kind = 'info') {
+  const colors = { info: 'border-white/10 text-slate-200', error: 'border-rose-400/40 text-rose-100', ok: 'border-emerald-400/40 text-emerald-100' };
+  const el = document.createElement('div');
+  el.className = `toast pointer-events-auto rounded-lg border bg-[#0d1219]/95 px-4 py-3 text-[13px] leading-snug shadow-2xl backdrop-blur ${colors[kind] || colors.info}`;
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), kind === 'error' ? 10000 : 4500);
+}
+
+/* ================= Event semantics ================= */
+const isRunning = e => e.status === 'running';
+const isDone = e => ['ok', 'done', 'completed', 'resumed', 'received'].includes(e.status);
+const errText = v => (v && typeof v === 'object') ? (v.error ? `${v.error}${v.status_code ? ' (' + v.status_code + ')' : ''}${v.status ? ' · ' + v.status : ''}` : JSON.stringify(v)) : String(v ?? 'Unknown error');
+const doneOf = (events, tool) => events.filter(e => e.tool === tool && isDone(e));
+const lastOk = tool => doneOf(S.events, tool).at(-1);
+const sttText = e => { if (!e) return ''; const r = e.result || {}; return r.transcript ?? r.text ?? r.instruction_text ?? e.args?.transcript ?? ''; };
+// Instruction comes from STT on /api/run, or from the "input" event on /api/agent.
+const instructionEvent = events => doneOf(events, 'stt').at(-1) || doneOf(events, 'input').at(-1);
+const khataEvent = events => doneOf(events, 'extract').at(-1) || doneOf(events, 'input').at(-1);
+
+// Same rule as main.py attach_field_confidence: lowest of the date/amount/type confidences.
+function entryConf(o) {
+  if (o === null || o === undefined) return null;
+  if (typeof o !== 'object') return num(o);
+  const keys = ['date', 'amount', 'type'].filter(k => num(o[k]) !== null);
+  const v = (keys.length ? keys.map(k => o[k]) : Object.values(o)).map(num).filter(x => x !== null);
+  return v.length ? Math.min(...v) : null;
+}
+function khataOf(e) {
+  if (!e) return { customer: '', entries: [], confidence: null };
+  const r = e.result || {};
+  const src = r.khata || r.khata_json || (r.result && r.result.entries ? r.result : null) || r;  // extract → result.result; input → result.khata_json
+  const entries = (src.entries || []).map((x, i) => ({ ...x, confidence: num(x.confidence) ?? entryConf(r.field_confidence?.entries?.[i]) }));
+  const confs = entries.map(x => x.confidence).filter(v => v !== null);
+  const confidence = num(r.confidence) ?? num(src.confidence) ?? (confs.length ? Math.min(...confs) : null);
+  return { customer: src.customer_name || '', entries, confidence };
+}
+function parseLine(line) {
+  if (line && typeof line === 'object') return { role: line.role, content: line.content ?? line.text ?? '', en: line.en };
+  const m = /^\s*(user|bot|customer|agent|kaam|assistant)\s*:\s*([\s\S]*)$/i.exec(String(line ?? ''));
+  if (!m) return { role: 'user', content: String(line ?? '') };
+  const who = m[1].toLowerCase();
+  return { role: ['bot', 'agent', 'kaam', 'assistant'].includes(who) ? 'bot' : 'user', content: m[2] };
+}
+function ruleGist(r) {
+  const acts = r.allowed_actions || [];
+  let g = { R1: 'voice-note reminder only', R2: 'may contact customer', R3: 'escalate to Finance Manager', R4: 'discount needs Finance Manager', R5: 'split disputed amount' }[r.rule_id] || 'policy applied';
+  if (r.rule_id === 'R2' && !acts.includes('start_customer_conversation')) g = 'contact deferred';
+  if (r.contact_allowed === false) g += ' · R6: no calls after 7 PM';
+  return g;
+}
+function contactName() {
+  const aw = S.events.find(e => e.status === 'awaiting_conversation');
+  return aw?.result?.contact || lastOk('find_customer')?.result?.contact || 'customer';
+}
+function outcomeParts(o) {
+  const parts = [];
+  if (o.promised_date) parts.push(`promised ${dayDate(o.promised_date)}`);
+  if (o.discount_requested) parts.push(`asked for ${inr(o.discount_amount)} discount`);
+  if (o.dispute) parts.push(`disputes ${inr(o.disputed_amount)}`);
+  return parts;
+}
+
+// Plain-language line for each event. The only place that knows tool semantics for the timeline.
+function describe(e) {
+  const r = e.result || {}, a = e.args || {};
+  if (e.status === 'error') return { title: `${e.tool === 'request' ? 'Request' : e.tool} failed`, detail: errText(r.error ?? r.detail) };
+  switch (e.tool) {
+    case 'stt':
+      if (isRunning(e)) return { title: 'Transcribing voice note…', detail: 'Sarvam speech-to-text' };
+      return { title: `Heard: “${sttText(e)}”`, detail: `Sarvam speech-to-text${r.language_code ? ' · ' + langName(r.language_code) : ''}` };
+    case 'extract': {
+      if (isRunning(e)) return { title: 'Reading khata photo…', detail: 'Sarvam Document AI' };
+      const k = khataOf(e);
+      const cash = k.entries.filter(x => x.type === 'cash_received');
+      const title = cash.length
+        ? `Read khata: ${cash.map(c => `${inr(c.amount)} cash on ${shortDate(c.date)}`).join(', ')}`
+        : `Read khata: ${k.entries.length} entr${k.entries.length === 1 ? 'y' : 'ies'}`;
+      return { title, detail: [k.customer, `${k.entries.length} entries`, k.confidence !== null ? `${pct(k.confidence)} confidence` : ''].filter(Boolean).join(' · ') };
+    }
+    case 'input': {
+      const k = khataOf(e);
+      return { title: `Instruction received: “${sttText(e)}”`, detail: `${k.entries.length} khata entries supplied as JSON` };
+    }
+    case 'find_customer':
+      return { title: `Found customer: ${r.name || a.name}`, detail: [r.contact && `Contact ${r.contact}`, langName(r.language), r.id].filter(Boolean).join(' · ') };
+    case 'get_ledger': {
+      const inv = (r.invoices || [])[0] || {};
+      return {
+        title: `Ledger: ${inv.id || 'invoice'} ${inr(r.balance)} ${(r.payments || []).length ? 'outstanding' : 'unpaid'}`,
+        detail: `${(r.payments || []).length} payments on record${inv.due_date ? ` · due ${shortDate(inv.due_date)}` : ''}`,
+      };
+    }
+    case 'record_ledger_correction':
+      return {
+        title: r.already_recorded ? `Khata payment already on ledger (${inr(a.amount)})` : `Corrected ledger: ${inr(r.before_balance)} → ${inr(r.after_balance)}`,
+        detail: `${inr(a.amount)} cash on ${shortDate(a.date)} · source: khata · ${pct(a.confidence)} confidence`,
+      };
+    case 'check_policy':
+      return { title: `Matched rule ${r.rule_id}: ${ruleGist(r)}`, detail: `${r.description || ''}${num(r.days_overdue) !== null ? ` · ${r.days_overdue} days overdue` : ''}` };
+    case 'start_customer_conversation':
+      if (e.status === 'resumed') {
+        const parts = outcomeParts(r);
+        return { title: `Call finished: ${parts.join(', ') || 'outcome recorded'}`, detail: `Spoke with ${contactName()} · outcome returned to KAAM` };
+      }
+      return { title: `Calling ${r.contact || contactName()} in ${langName(a.language || r.language) || 'their language'}`, detail: `Objective: confirm a payment date for ${inr(a.amount_due ?? r.amount_due)}` };
+    case 'record_commitment':
+      return { title: `Commitment recorded: ${inr(r.amount ?? a.amount)} by ${dayDate(r.promised_date || a.promised_date)}`, detail: r.already_recorded ? `${r.id || ''} · already on file` : (r.id || '') };
+    case 'schedule_followup':
+      return { title: `Follow-up set: ${dayDateTime(r.datetime || a.datetime)}`, detail: r.condition || a.condition || '' };
+    case 'assign_task':
+      return {
+        title: `Handed to ${r.member_name || a.member_id} (${a.rule_id || r.rule_id}): ${inrText(String(a.task || r.task || '').split(';')[0])}`,
+        detail: `Due ${dayDateTime(r.due_at || a.due_at)} · ${a.reason || r.reason || ''}`,
+      };
+    case 'notify_owner':
+      return { title: `Owner${r.owner ? ' ' + r.owner : ''} notified with summary`, detail: inrText(a.summary_en || r.summary_en || '') };
+    default:
+      return { title: e.tool, detail: '' };
+  }
+}
+
+/* ================= State ================= */
+const S = {
+  token: 0, source: null, events: [], chain: Promise.resolve(), streamOpen: false, abort: null,
+  audio: null, khataFile: null, khataUrl: null,
+  awaiting: null, call: null, finished: false, balShown: null, balRaf: 0,
+};
+
+/* ================= Event pipeline ================= */
+function enqueue(ev) {
+  const t = S.token;
+  if (!ev.ts) ev.ts = new Date().toISOString();
+  S.chain = S.chain.then(() => (t === S.token ? processEvent(ev, t) : null)).catch(err => console.error('[KAAM] render error', err));
+  return S.chain;
+}
+
+async function processEvent(ev, t) {
+  S.events.push(ev);
+  if (ev.tool === 'call_transcript') { if (S.call) addCaption(parseLine(ev.result?.line)); return; }
+
+  const node = timelineUpsert(ev);
+  if (node.isNew) {
+    setNodeState(node.el, 'pending');
+    updateGhost();
+    await sleep(160); if (t !== S.token) return;
+    setNodeState(node.el, 'running');
+  }
+  if (!isRunning(ev)) {
+    await sleep(node.isNew ? 520 : 260); if (t !== S.token) return;
+    setNodeState(node.el, ev.status === 'error' ? 'error' : ev.status === 'awaiting_conversation' ? 'await' : 'done');
+  }
+
+  renderInstruction(); renderCentre(); renderTeam(); renderMetrics();
+
+  if (ev.status === 'awaiting_conversation') onAwaiting(ev);
+  else if (ev.tool === 'start_customer_conversation' && ev.status === 'resumed') onResumed(ev);
+  else if (ev.status === 'error') onError(ev);
+  else if (ev.status === 'completed') onCompleted();
+  updateGhost();
+}
+
+function timelineUpsert(ev) {
+  const tl = $('timeline');
+  const { title, detail } = describe(ev);
+  let el = null;
+  if (ev.tool === 'start_customer_conversation' && ev.status === 'resumed') el = tl.querySelector('li[data-tool="start_customer_conversation"][data-state="await"]');
+  if (!el) el = [...tl.querySelectorAll('li[data-state="running"]')].filter(n => n.dataset.tool === ev.tool).pop() || null;
+  const isNew = !el;
+  if (isNew) { el = document.createElement('li'); el.className = 'tl-node'; el.dataset.tool = ev.tool; tl.appendChild(el); }
+  el.innerHTML = `<span class="tl-dot" aria-hidden="true"></span>
+    <div class="tl-title">${esc(title)}</div>
+    ${detail ? `<div class="tl-detail">${esc(detail)}</div>` : ''}
+    <div class="tl-meta">${esc(ev.tool)}${ev.step !== null && ev.step !== undefined ? ` · step ${esc(ev.step)}` : ''}${ev.ts ? ` · ${clock(ev.ts)}` : ''}</div>`;
+  const n = tl.children.length;
+  $('tlCount').textContent = `${n} step${n === 1 ? '' : 's'}`;
+  return { el, isNew };
+}
+function setNodeState(el, s) { el.dataset.state = s; }
+
+function updateGhost() {
+  const busyNode = $('timeline').querySelector('li[data-state="running"],li[data-state="pending"]');
+  const show = S.streamOpen && !S.finished && !busyNode;
+  $('tlGhost').hidden = !show;
+  if (!show) return;
+  const last = S.events.filter(e => e.tool !== 'call_transcript').at(-1);
+  let txt = 'Deciding the next step…';
+  if (!last) txt = S.source === 'replay' ? 'Loading saved run…' : 'Uploading voice note and khata photo…';
+  else if (last.tool === 'stt') txt = 'Reading khata photo with Sarvam Document AI…';
+  else if (last.status === 'resumed') txt = 'Acting on the call outcome…';
+  $('tlGhostText').textContent = txt;
+}
+
+function setRunStatus(kind) {
+  const map = {
+    running: ['chip-sky', '<span class="dot-live"></span>Running'],
+    call: ['chip-amber', '<span class="dot-live"></span>In call'],
+    done: ['chip-emerald', '✓ Completed'],
+    error: ['chip-rose', '✕ Error'],
+  };
+  const [cls, html] = map[kind];
+  $('runStatus').className = `chip ${cls}`;
+  $('runStatus').innerHTML = html;
+}
+
+/* ================= Renderers (derived from S.events) ================= */
+function renderInstruction() {
+  const e = instructionEvent(S.events);
+  if (e) {
+    $('instrText').textContent = `“${sttText(e)}”`;
+    const l = langName(e.result?.language_code);
+    $('instrLang').hidden = !l; $('instrLang').textContent = l;
+  } else if (S.source === 'replay' && S.events.length) {
+    $('instrText').textContent = 'Replaying saved run';
+  }
+  const runId = S.events.find(e => e.run_id)?.run_id;
+  $('runMeta').textContent = [runId && `run ${String(runId).slice(0, 8)}`, S.source].filter(Boolean).join(' · ');
+}
+
+function renderCentre() {
+  const cust = lastOk('find_customer')?.result;
+  const ledger = lastOk('get_ledger')?.result;
+  const khataEv = khataEvent(S.events);
+  $('centreEmpty').hidden = !!(cust || ledger || khataEv);
+
+  // Customer
+  const cc = $('customerCard');
+  if (cust) {
+    const initials = String(cust.name || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const resumed = S.events.find(e => e.tool === 'start_customer_conversation' && e.status === 'resumed');
+    const lastContact = resumed ? `Called today · ${outcomeParts(resumed.result || {}).join(', ') || 'outcome recorded'}` : (S.awaiting ? 'Call in progress' : 'Not contacted in this run');
+    setHTML(cc, `<div class="rise flex items-center gap-4 px-5 py-4">
+        <div class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sky-400/10 font-semibold text-sky-200 ring-1 ring-sky-400/25">${esc(initials)}</div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2"><span class="truncate text-[15px] font-semibold text-white">${esc(cust.name)}</span><span class="num text-[11px] text-slate-500">${esc(cust.id || '')}</span></div>
+          <div class="mt-0.5 truncate text-xs text-slate-400">${esc([cust.contact, cust.phone, langName(cust.language)].filter(Boolean).join(' · '))}</div>
+        </div>
+        <span class="eyebrow hidden sm:block">Customer</span>
+      </div>
+      <div class="border-t border-white/5 px-5 py-2.5 text-[11.5px] text-slate-500">${esc(lastContact)}</div>`);
+    cc.hidden = false;
+  } else cc.hidden = true;
+
+  // Invoice
+  const ic = $('invoiceCard');
+  const inv = ledger?.invoices?.[0];
+  if (inv) {
+    const corr = lastOk('record_ledger_correction');
+    const commit = lastOk('record_commitment');
+    const fol = lastOk('schedule_followup');
+    const pol = lastOk('check_policy');
+    const start = num(ledger.balance ?? inv.balance ?? inv.amount);
+    const target = corr ? num(corr.result?.after_balance) : start;
+    const corrected = corr && !corr.result?.already_recorded && num(corr.result?.before_balance) !== num(corr.result?.after_balance);
+    const due = parseDay(inv.due_date);
+    const days = num(pol?.result?.days_overdue) ?? (due ? Math.max(0, Math.floor((Date.now() - due) / 86400000)) : null);
+    const status = commit ? ['chip-emerald', `Promised · ${dayDate(commit.result?.promised_date || commit.args?.promised_date)}`]
+      : corrected ? ['chip-sky', 'Partially paid'] : ['chip-amber', String(inv.status || 'unpaid').replace(/^\w/, c => c.toUpperCase())];
+    setHTML(ic, `<div class="panel-h"><span class="eyebrow">Invoice</span><span class="num text-[12px] text-slate-300">${esc(inv.id)}</span><span class="chip ${status[0]} ml-auto">${esc(status[1])}</span></div>
+      <div class="px-5 py-5">
+        <div class="text-xs text-slate-500">Balance due</div>
+        <div class="mt-1 flex flex-wrap items-center gap-3">
+          <span id="balAmt" class="num text-[40px] font-semibold leading-none tracking-tight text-white"></span>
+          ${corrected ? '<span class="chip chip-emerald rise">✓ Corrected from khata</span>' : ''}
+        </div>
+        ${corrected ? `<div class="rise mt-2 text-xs text-slate-400"><span class="num text-slate-500 line-through">${inr(corr.result.before_balance)}</span>
+          <span class="mx-1.5 text-slate-600">·</span><span class="text-emerald-300">−${inr(corr.args?.amount)}</span> cash on ${esc(shortDate(corr.args?.date))}
+          <span class="text-slate-500">(khata · ${pct(corr.args?.confidence)} confidence)</span></div>` : ''}
+        <dl class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-4">
+          <div><dt class="text-slate-500">Invoice amount</dt><dd class="num mt-0.5 text-slate-200">${inr(inv.amount)}</dd></div>
+          <div><dt class="text-slate-500">Invoiced</dt><dd class="mt-0.5 text-slate-200">${esc(shortDate(inv.invoice_date))}</dd></div>
+          <div><dt class="text-slate-500">Due</dt><dd class="mt-0.5 text-slate-200">${esc(shortDate(inv.due_date))}</dd></div>
+          <div><dt class="text-slate-500">Overdue</dt><dd class="num mt-0.5 ${days > 30 ? 'text-rose-300' : days >= 8 ? 'text-amber-300' : 'text-slate-200'}">${days === null ? '—' : days + ' days'}</dd></div>
+        </dl>
+        ${commit ? `<div class="rise mt-5 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.05] px-4 py-3 text-[13px] text-emerald-100">
+          ✓ ${inr(commit.result?.amount ?? commit.args?.amount)} promised for <b class="font-semibold">${esc(dayDate(commit.result?.promised_date || commit.args?.promised_date))}</b>
+          ${fol ? `<div class="mt-1 text-xs text-emerald-200/70">Follow-up ${esc(dayDateTime(fol.result?.datetime || fol.args?.datetime))} — ${esc(fol.result?.condition || fol.args?.condition || '')}</div>` : ''}
+        </div>` : ''}
+      </div>`);
+    ic.hidden = false;
+    if (S.balShown === null) S.balShown = start;
+    $('balAmt').textContent = inr(S.balShown);
+    if (target !== null && target !== S.balShown) animateBalance(S.balShown, target);
+  } else ic.hidden = true;
+
+  // Evidence
+  const ec = $('evidenceCard');
+  if (khataEv) {
+    const k = khataOf(khataEv);
+    const corrs = doneOf(S.events, 'record_ledger_correction');
+    const rows = k.entries.map(x => {
+      const used = corrs.some(c => num(c.args?.amount) === num(x.amount) && c.args?.date === x.date);
+      const c = x.confidence;
+      return `<tr class="${used ? 'bg-emerald-400/[0.04]' : ''}">
+        <td class="num whitespace-nowrap text-slate-300">${esc(shortDate(x.date))}</td>
+        <td class="text-slate-300">${esc(x.description || '')}${used ? ' <span class="chip chip-emerald ml-1">applied</span>' : ''}</td>
+        <td><span class="chip ${x.type === 'cash_received' ? 'chip-emerald' : ''}">${esc(String(x.type || '').replace('_', ' '))}</span></td>
+        <td class="num whitespace-nowrap text-right text-slate-100">${inr(x.amount)}</td>
+        <td class="w-20 pl-2">${c === null ? '<span class="text-slate-600">—</span>' : `<div class="num text-right text-[11px] text-slate-400">${pct(c)}</div><div class="mt-1 h-1 rounded bg-white/5"><div class="h-1 rounded ${c >= .9 ? 'bg-emerald-400/70' : c >= .75 ? 'bg-amber-400/70' : 'bg-rose-400/70'}" style="width:${Math.round(Math.min(1, c) * 100)}%"></div></div>`}</td>
+      </tr>`;
+    }).join('');
+    setHTML(ec, `<div class="panel-h"><span class="eyebrow">Khata evidence</span><span class="ml-auto text-[11px] text-slate-500">Sarvam Document AI</span></div>
+      <div class="flex gap-4 px-5 py-4">
+        ${S.khataUrl ? `<img src="${S.khataUrl}" alt="Khata page" class="h-28 w-20 shrink-0 rounded-md border border-white/10 object-cover">` : ''}
+        <div class="min-w-0 flex-1 overflow-x-auto">
+          <div class="mb-2 text-xs text-slate-400">${esc(k.customer || 'Khata page')} · ${k.entries.length} entries${k.confidence !== null ? ` · lowest field confidence <span class="num text-slate-200">${pct(k.confidence)}</span>` : ''}</div>
+          <table class="t"><thead><tr><th>Date</th><th>Entry</th><th>Type</th><th class="text-right">Amount</th><th class="text-right">Conf.</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>
+      </div>`);
+    ec.hidden = false;
+  } else ec.hidden = true;
+}
+
+function animateBalance(from, to) {
+  cancelAnimationFrame(S.balRaf);
+  const el = $('balAmt'); if (!el) return;
+  el.classList.remove('bal-flash'); void el.offsetWidth; el.classList.add('bal-flash');
+  const t0 = performance.now(), dur = 1400;
+  const step = now => {
+    const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    S.balShown = p >= 1 ? to : from + (to - from) * e;
+    const cur = $('balAmt'); if (cur) cur.textContent = inr(Math.round(S.balShown));
+    if (p < 1) S.balRaf = requestAnimationFrame(step);
+  };
+  S.balRaf = requestAnimationFrame(step);
+}
+
+function renderTeam() {
+  const tasks = doneOf(S.events, 'assign_task');
+  const fols = doneOf(S.events, 'schedule_followup');
+  const cards = [
+    ...tasks.map(e => {
+      const r = e.result || {}, a = e.args || {};
+      const name = r.member_name || a.member_id || '?';
+      return `<div class="rise rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+        <div class="flex items-center gap-3">
+          <div class="grid h-9 w-9 place-items-center rounded-full bg-violet-400/15 font-semibold text-violet-200">${esc(name[0].toUpperCase())}</div>
+          <div class="min-w-0"><div class="text-sm font-medium text-slate-100">${esc(name)}</div><div class="num text-[10.5px] text-slate-500">${esc([r.id, a.member_id || r.member_id].filter(Boolean).join(' · '))}</div></div>
+          <span class="chip chip-amber ml-auto">${esc(String(r.status || 'assigned').replace(/^\w/, c => c.toUpperCase()))}</span>
+        </div>
+        <p class="mt-3 text-[13px] leading-snug text-slate-200">${esc(inrText(a.task || r.task))}</p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px]"><span class="chip chip-violet">${esc(a.rule_id || r.rule_id)}</span><span class="text-slate-400">Due ${esc(dayDateTime(r.due_at || a.due_at))}</span></div>
+        <div class="mt-2 text-[11px] text-slate-500">Why: ${esc(inrText(a.reason || r.reason || ''))}</div>
+      </div>`;
+    }),
+    ...fols.map(e => {
+      const r = e.result || {}, a = e.args || {};
+      return `<div class="rise rounded-xl border border-white/[0.07] bg-white/[0.02] p-4">
+        <div class="flex items-center gap-3">
+          <div class="grid h-9 w-9 place-items-center rounded-full bg-emerald-400/15 font-mono text-sm font-semibold text-emerald-200">K</div>
+          <div class="min-w-0"><div class="text-sm font-medium text-slate-100">KAAM</div><div class="num text-[10.5px] text-slate-500">${esc(r.id || '')}</div></div>
+          <span class="chip chip-sky ml-auto">${esc(String(r.status || 'scheduled').replace(/^\w/, c => c.toUpperCase()))}</span>
+        </div>
+        <p class="mt-3 text-[13px] leading-snug text-slate-200">Follow up on ${esc(r.invoice_id || a.invoice_id || 'invoice')}</p>
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-[11px]"><span class="chip">auto</span><span class="text-slate-400">${esc(dayDateTime(r.datetime || a.datetime))}</span></div>
+        <div class="mt-2 text-[11px] text-slate-500">When: ${esc(r.condition || a.condition || '')}</div>
+      </div>`;
+    }),
+  ];
+  $('teamEmpty').hidden = cards.length > 0;
+  $('teamGrid').hidden = cards.length === 0;
+  setHTML($('teamGrid'), cards.join(''));
+  $('teamCount').textContent = cards.length ? `${tasks.length} handoff${tasks.length === 1 ? '' : 's'} · ${fols.length} follow-up${fols.length === 1 ? '' : 's'}` : '';
+}
+
+function renderMetrics() {
+  const confirmed = doneOf(S.events, 'record_commitment').reduce((s, e) => s + (num(e.result?.amount ?? e.args?.amount) || 0), 0);
+  const khata = doneOf(S.events, 'record_ledger_correction').filter(e => !e.result?.already_recorded).reduce((s, e) => s + (num(e.args?.amount) || 0), 0);
+  const open = doneOf(S.events, 'assign_task').filter(e => !['done', 'closed', 'completed'].includes(e.result?.status)).length;
+  countTo($('mConfirmed'), confirmed, inr);
+  countTo($('mKhata'), khata, inr);
+  countTo($('mHandoffs'), open, v => String(v));
+}
+function countTo(el, to, fmt) {
+  const from = el._v || 0;
+  if (from === to) { el.textContent = fmt(to); return; }
+  cancelAnimationFrame(el._raf);
+  const t0 = performance.now();
+  const step = now => {
+    const p = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - p, 3);
+    const v = p >= 1 ? to : Math.round(from + (to - from) * e);
+    el.textContent = fmt(v); el._v = v;
+    if (p < 1) el._raf = requestAnimationFrame(step);
+  };
+  el._raf = requestAnimationFrame(step);
+}
+
+/* ================= Lifecycle hooks ================= */
+function onAwaiting(ev) {
+  S.awaiting = ev;
+  setRunStatus('call');
+  showCallPanel(ev);
+  if (S.source === 'live') connectCallStream();
+  else if (S.source === 'mock') playCall(MOCK_CALL, S.token);
+  // replay drives the call itself
+}
+function onResumed(ev) {
+  setRunStatus('running');
+  if (S.call) { stopCallTimer(); setCallStatus('sent'); }
+  $('ocForm').hidden = true;
+  const o = ev.result || {};
+  const chips = [
+    o.promised_date ? `<span class="chip chip-emerald">Promised ${esc(dayDate(o.promised_date))}</span>` : '<span class="chip">No date given</span>',
+    o.discount_requested ? `<span class="chip chip-amber">Discount ${inr(o.discount_amount)} requested</span>` : '<span class="chip">No discount asked</span>',
+    o.dispute ? `<span class="chip chip-rose">Disputes ${inr(o.disputed_amount)}</span>` : '<span class="chip">No dispute</span>',
+  ];
+  $('ocSummary').innerHTML = chips.join('');
+  $('ocSummary').hidden = false;
+  $('ocNote').textContent = 'Returned to KAAM';
+  $('outcomeBox').hidden = false;
+}
+function onError(ev) {
+  setRunStatus('error');
+  toast(`${ev.tool} failed: ${errText(ev.result?.error ?? ev.result?.detail)}`, 'error');
+  const resumed = S.events.some(e => e.status === 'resumed');
+  if (S.awaiting && !resumed && !$('outcomeBox').hidden) setFormEnabled(true);
+}
+async function onCompleted() {
+  if (S.finished) return;
+  S.finished = true;
+  setRunStatus('done');
+  let events = S.events, meta = {};
+  if (S.source === 'live') {
+    try {
+      const r = await fetch(API.receipt, { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        if (Array.isArray(j.events) && j.events.length) events = j.events;
+        meta.id = j.receipt_id || j.id;
+      }
+    } catch (e) { console.warn('[KAAM] /api/receipt unavailable, using local event log', e); }
+  }
+  renderReceipt(events, meta);
+}
+
+/* ================= Call panel ================= */
+function showCallPanel(ev) {
+  const cust = lastOk('find_customer')?.result || {};
+  const lang = langName(ev.args?.language || ev.result?.language) || 'Tamil';
+  S.call = { lines: [], startedAt: null, timer: null, es: null, status: 'connecting' };
+  $('callPlaceholder').hidden = true;
+  $('callPanel').hidden = false;
+  $('callTitle').textContent = `Sarvam Voice Agent · ${lang}`;
+  $('callSub').textContent = [ev.result?.contact || cust.contact, cust.name, `${inr(ev.args?.amount_due ?? ev.result?.amount_due)} due`].filter(Boolean).join(' · ');
+  $('callTimer').textContent = '00:00';
+  $('captions').innerHTML = '';
+  $('captionsEmpty').hidden = false;
+  $('captionsEmpty').textContent = 'Waiting for the first words…';
+  $('outcomeBox').hidden = true;
+  $('ocForm').hidden = false;
+  $('ocSummary').hidden = true;
+  $('ocErr').hidden = true;
+  setFormEnabled(true);
+  setCallStatus('connecting');
+  if (window.matchMedia('(max-width: 1023px)').matches) $('callPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function setCallStatus(s) {
+  if (!S.call) return;
+  S.call.status = s;
+  const map = {
+    connecting: ['chip-amber', 'Connecting…'], live: ['chip-emerald', '<span class="dot-live"></span>Live'], ended: ['', 'Call ended'],
+    unavailable: ['chip-rose', 'Live stream unavailable'], sent: ['chip-sky', 'Outcome sent'],
+  };
+  const [cls, html] = map[s];
+  $('callStatus').className = `chip ${cls} ml-auto`;
+  $('callStatus').innerHTML = html;
+  $('callWave').classList.toggle('live', s === 'live');
+}
+function stopCallTimer() { if (S.call?.timer) { clearInterval(S.call.timer); S.call.timer = null; } }
+function handleCallMsg(m) {
+  if (!S.call || !m) return;
+  if (m.event === 'connected') {
+    setCallStatus('live');
+    S.call.startedAt = Date.now();
+    stopCallTimer();
+    S.call.timer = setInterval(() => { $('callTimer').textContent = mmss((Date.now() - S.call.startedAt) / 1000); }, 250);
+  } else if (m.event === 'interaction_end') {
+    stopCallTimer();
+    if (S.call.es) { S.call.es.close(); S.call.es = null; }
+    setCallStatus('ended');
+    showOutcome(m.conversation_outcome || m.outcome || null);
+  } else if (m.role) {
+    addCaption(m);
+  }
+}
+function addCaption(m) {
+  if (!S.call || !m || !m.content) return;
+  if (S.call.lines.some(l => l.content === m.content)) return;
+  S.call.lines.push({ role: m.role, content: m.content });
+  $('captionsEmpty').hidden = true;
+  const isBot = m.role === 'bot';
+  const who = isBot ? 'KAAM' : (contactName() || 'Customer');
+  const li = document.createElement('li');
+  li.className = 'cap grid grid-cols-[68px_minmax(0,1fr)] gap-3';
+  li.innerHTML = `<div class="pt-1 text-[10px] font-semibold uppercase tracking-[.14em] ${isBot ? 'text-emerald-300' : 'text-sky-300'}">${esc(who)}</div>
+    <div><div class="text-[14px] leading-relaxed text-slate-100">${esc(m.content)}</div>${m.en ? `<div class="mt-0.5 text-xs text-slate-500">${esc(m.en)}</div>` : ''}</div>`;
+  $('captions').appendChild(li);
+  const w = $('captionsWrap'); w.scrollTop = w.scrollHeight;
+}
+function connectCallStream() {
+  let connected = false;
+  let es;
+  try { es = new EventSource(API.callStream); } catch (e) { callUnavailable(e.message); return; }
+  S.call.es = es;
+  es.onmessage = msg => {
+    let d; try { d = JSON.parse(msg.data); } catch { return; }
+    if (d.event === 'connected') connected = true;
+    handleCallMsg(d);
+  };
+  es.onerror = () => {
+    if (!S.call || S.call.es !== es) return;
+    es.close(); S.call.es = null;
+    if (S.call.status === 'ended' || S.call.status === 'sent') return;
+    if (connected) handleCallMsg({ event: 'interaction_end' });
+    else callUnavailable(`could not open ${API.callStream}`);
+  };
+}
+function callUnavailable(why) {
+  setCallStatus('unavailable');
+  $('captionsEmpty').textContent = `No live captions (${why}). Enter the call outcome below to continue.`;
+  showOutcome(null);
+}
+
+/* ================= Outcome → resume ================= */
+function showOutcome(prefill) {
+  $('outcomeBox').hidden = false;
+  $('ocNote').textContent = 'Sent to KAAM to continue the run';
+  if (S.source === 'replay') {
+    $('ocForm').hidden = true;
+    return; // the resumed event fills the summary
+  }
+  const o = prefill || {};
+  $('ocDate').value = o.promised_date || '';
+  $('ocDiscount').checked = !!o.discount_requested;
+  $('ocDiscountAmt').value = o.discount_amount ?? '';
+  $('ocDispute').checked = !!o.dispute;
+  $('ocDisputeAmt').value = o.disputed_amount ?? '';
+  $('ocDisputeReason').value = o.dispute_reason || '';
+  $('ocDisputeReason').hidden = !o.dispute;
+  if (prefill && (prefill.promised_date || prefill.dispute)) {
+    $('ocNote').textContent = 'Outcome captured from the call';
+    const t = S.token;
+    $('ocSubmit').textContent = 'Continuing…';
+    setTimeout(() => { if (t === S.token && !$('ocSubmit').disabled) submitOutcome(); }, 1400);
+  }
+}
+function setFormEnabled(on) {
+  for (const el of $('ocForm').querySelectorAll('input,button')) el.disabled = !on;
+  $('ocSubmit').textContent = on ? 'Continue run →' : 'Continuing…';
+}
+async function submitOutcome() {
+  const o = { discount_requested: $('ocDiscount').checked, dispute: $('ocDispute').checked };
+  const date = $('ocDate').value;
+  if (date) o.promised_date = date;
+  if (o.discount_requested) o.discount_amount = num($('ocDiscountAmt').value) || 0;
+  if (o.dispute) { o.disputed_amount = num($('ocDisputeAmt').value) || 0; o.dispute_reason = $('ocDisputeReason').value.trim(); }
+  if (!date && !o.dispute) { $('ocErr').textContent = 'Enter the promised payment date (or mark a dispute).'; $('ocErr').hidden = false; return; }
+  $('ocErr').hidden = true;
+  o.transcript_lines = (S.call?.lines || []).map(l => `${l.role}: ${l.content}`);
+  setFormEnabled(false);
+  const t = S.token;
+  if (S.source === 'mock') { await playScript(mockPhase2(o), t); return; }
+  await streamPost(API.resume, {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages: S.awaiting?.messages || [], conversation_outcome: o }),
+  });
+}
+
+/* ================= Transports ================= */
+async function streamPost(url, init) {
+  const t = S.token;
+  S.abort = new AbortController();
+  S.streamOpen = true; updateGhost();
+  try {
+    const res = await fetch(url, { method: 'POST', signal: S.abort.signal, ...init });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`POST ${url} → HTTP ${res.status}${body ? ': ' + body.slice(0, 500) : ''}`);
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+        const data = chunk.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).replace(/^ /, '')).join('\n');
+        if (!data) continue;
+        try { enqueue(JSON.parse(data)); } catch (e) { console.warn('[KAAM] bad SSE payload', data); }
+      }
+    }
+  } catch (err) {
+    if (t !== S.token || err.name === 'AbortError') return;
+    enqueue({ step: null, tool: 'request', args: { url }, result: { error: err.message }, status: 'error', ts: new Date().toISOString() });
+  } finally {
+    await S.chain;
+    if (t === S.token) {
+      S.streamOpen = false; updateGhost();
+      const last = S.events.at(-1);
+      if (last && !['awaiting_conversation', 'completed', 'error'].includes(last.status)) toast('The event stream closed before the run finished.', 'error');
+    }
+  }
+}
+
+async function playScript(items, t) {
+  S.streamOpen = true; updateGhost();
+  for (const it of items) {
+    await sleep(it.d); if (t !== S.token) return;
+    enqueue({ ...it.ev, ts: new Date().toISOString() });
+  }
+  await S.chain;
+  if (t === S.token) { S.streamOpen = false; updateGhost(); }
+}
+async function playCall(items, t) {
+  for (const it of items) {
+    await sleep(it.d); if (t !== S.token) return;
+    handleCallMsg(it.m);
+  }
+}
+
+/* ================= Mock script (same shapes as the backend) ================= */
+const MOCK_OUTCOME = { promised_date: '2026-09-28', discount_requested: true, discount_amount: 5000, dispute: false };
+const MOCK_CALL = [
+  { d: 900, m: { event: 'connected' } },
+  { d: 1300, m: { role: 'bot', content: 'வணக்கம் செந்தில் சார், Noetos-லிருந்து KAAM பேசுகிறேன். INV-1042 பற்றி ஒரு நிமிஷம் பேசலாமா?', en: 'Hello Senthil sir, KAAM from Noetos. Can we talk about INV-1042 for a minute?' } },
+  { d: 2600, m: { role: 'user', content: 'சொல்லுங்க. 12-ஆம் தேதி இருபதாயிரம் cash கொடுத்தேனே, அது entry ஆச்சா?', en: 'Go ahead. I paid ₹20,000 cash on the 12th — was that entered?' } },
+  { d: 2600, m: { role: 'bot', content: 'ஆமாம் சார், khata-வில் பார்த்து பதிவு செய்துவிட்டோம். மீதி ₹62,500 நிலுவையில் உள்ளது. எப்போது செலுத்த முடியும்?', en: 'Yes sir, we saw it in the khata and recorded it. ₹62,500 is pending. When can you pay?' } },
+  { d: 3000, m: { role: 'user', content: 'Monday 28-ஆம் தேதி full-ஆ கொடுத்துடறேன். Thoda discount mil sakta hai? ஐயாயிரம் குறைச்சா நல்லா இருக்கும்.', en: 'I’ll pay in full on Monday the 28th. Can I get a small discount? ₹5,000 off would help.' } },
+  { d: 3000, m: { role: 'bot', content: 'Discount-ஐ நான் approve செய்ய முடியாது சார், finance team-க்கு அனுப்புகிறேன். ₹62,500, திங்கள் 28 செப்டம்பர் — சரியா?', en: 'I can’t approve a discount, sir — I’ll send it to the finance team. ₹62,500 on Monday 28 September — correct?' } },
+  { d: 2600, m: { role: 'user', content: 'சரி, confirm. Theek hai, Monday pakka.', en: 'Okay, confirmed. Fine, Monday for sure.' } },
+  { d: 1800, m: { event: 'interaction_end', outcome: MOCK_OUTCOME } },
+];
+let MOCK_RUN = 'mock-run';
+function mockPhase1() {
+  MOCK_RUN = 'mock-' + Math.random().toString(16).slice(2, 10);
+  const ev = (step, tool, args, result, status = 'ok') => ({ run_id: MOCK_RUN, step, tool, args, result, status });
+  const transcript = 'Murugan Traders ka payment check karo. Overdue hai toh Tamil mein baat karke date confirm karo.';
+  const khata = {
+    customer_name: 'Murugan Traders',
+    entries: [
+      { date: '2026-08-17', description: 'Invoice INV-1042', amount: 82500, type: 'invoice', confidence: 0.97 },
+      { date: '2026-09-12', description: 'Cash received — Senthil', amount: 20000, type: 'cash_received', confidence: 0.94 },
+    ],
+    confidence: 0.94,
+  };
+  const customer = { id: 'C102', name: 'Murugan Traders', contact: 'Senthil', phone: '+91-98XXXXXX21', language: 'ta-IN', owner_id: 'T2' };
+  const invoice = { id: 'INV-1042', customer_id: 'C102', amount: 82500, invoice_date: '2026-08-17', due_date: '2026-09-09', status: 'unpaid' };
+  const source = 'khata: handwritten cash_received entry';
+  const objective = 'Discuss the overdue invoice in Tamil and confirm a payment date';
+  return [
+    { d: 450, ev: ev(1, 'stt', { filename: 'instruction.wav' }, {}, 'running') },
+    { d: 1400, ev: ev(1, 'stt', { filename: 'instruction.wav' }, { transcript, language_code: 'hi-IN' }) },
+    { d: 350, ev: ev(2, 'extract', { filename: 'khata.jpg' }, {}, 'running') },
+    { d: 2300, ev: ev(2, 'extract', { filename: 'khata.jpg' }, khata) },
+    { d: 700, ev: ev(3, 'find_customer', { name: 'Murugan Traders' }, customer) },
+    { d: 800, ev: ev(4, 'get_ledger', { customer_id: 'C102' }, { customer_id: 'C102', invoices: [{ ...invoice, balance: 82500 }], payments: [], balance: 82500 }) },
+    { d: 1100, ev: ev(5, 'record_ledger_correction', { invoice_id: 'INV-1042', amount: 20000, date: '2026-09-12', source, confidence: 0.94 },
+      { payment: { id: 'PAY-0001', invoice_id: 'INV-1042', customer_id: 'C102', amount: 20000, date: '2026-09-12', source, confidence: 0.94 }, before_balance: 82500, after_balance: 62500, already_recorded: false }) },
+    { d: 1100, ev: ev(6, 'check_policy', { days_overdue: 17, balance: 62500, situation: 'overdue collection' },
+      { rule_id: 'R2', allowed_actions: ['start_customer_conversation', 'record_commitment', 'schedule_followup', 'notify_owner'], description: '8-30 days overdue: KAAM may speak with customer and get a payment date', matched_rules: ['R2'], contact_allowed: true, days_overdue: 17, balance: 62500 }) },
+    { d: 900, ev: { ...ev(7, 'start_customer_conversation', { customer_id: 'C102', language: 'ta-IN', objective, amount_due: 62500 },
+      { status: 'awaiting_conversation', customer_id: 'C102', contact: 'Senthil', language: 'ta-IN', objective, amount_due: 62500 }, 'awaiting_conversation'), messages: [] } },
+  ];
+}
+function mockPhase2(o) {
+  const ev = (step, tool, args, result, status = 'ok') => ({ run_id: MOCK_RUN, step, tool, args, result, status });
+  const amount = 62500 - (o.dispute ? (o.disputed_amount || 0) : 0);
+  const items = [{ d: 500, ev: ev(8, 'start_customer_conversation', {}, o, 'resumed') }];
+  let step = 8;
+  for (const line of o.transcript_lines || []) items.push({ d: 40, ev: ev(++step, 'call_transcript', {}, { line }) });
+  const due = '2026-09-28T17:00:00+05:30';
+  if (o.promised_date) {
+    items.push({ d: 900, ev: ev(++step, 'record_commitment', { invoice_id: 'INV-1042', amount, promised_date: o.promised_date },
+      { id: 'COM-0001', invoice_id: 'INV-1042', amount, promised_date: o.promised_date, recorded_at: new Date().toISOString(), already_recorded: false }) });
+    const dt = `${o.promised_date}T18:00:00+05:30`;
+    const cond = 'If the promised payment has not been received';
+    items.push({ d: 850, ev: ev(++step, 'schedule_followup', { invoice_id: 'INV-1042', datetime: dt, condition: cond },
+      { id: 'FOL-0001', invoice_id: 'INV-1042', datetime: dt, condition: cond, status: 'scheduled' }) });
+  }
+  if (o.discount_requested) {
+    const task = `Review INR ${Number(o.discount_amount || 0).toLocaleString('en-IN')} discount request for INV-1042; do not apply without approval`;
+    const args = { member_id: 'T1', task, reason: 'Customer requested a discount; KAAM cannot approve it', rule_id: 'R4',
+      evidence: JSON.stringify({ invoice_id: 'INV-1042', discount_requested: true, discount_amount: o.discount_amount, conversation_outcome: o }), due_at: due };
+    items.push({ d: 950, ev: ev(++step, 'assign_task', args, { id: 'TASK-0001', member_name: 'Priya', ...args, depends_on: null, status: 'assigned' }) });
+  }
+  if (o.dispute) {
+    const args = { member_id: 'T2', task: `Resolve disputed INR ${Number(o.disputed_amount || 0).toLocaleString('en-IN')} on INV-1042`, reason: 'Customer disputed part of the balance', rule_id: 'R5', evidence: JSON.stringify(o), due_at: due };
+    items.push({ d: 900, ev: ev(++step, 'assign_task', args, { id: 'TASK-0002', member_name: 'Arjun', ...args, depends_on: null, status: 'assigned' }) });
+  }
+  const summary = `I recorded the khata cash payment of INR 20,000 for Murugan Traders, reducing INV-1042 from INR 82,500 to INR 62,500. `
+    + (o.promised_date ? `The supplied customer conversation outcome records a promise to pay INR ${amount.toLocaleString('en-IN')} on ${o.promised_date}, and a conditional follow-up was scheduled. ` : 'The current playbook was checked before deciding the next action. ')
+    + (o.discount_requested ? `A requested INR ${Number(o.discount_amount || 0).toLocaleString('en-IN')} discount was assigned to Priya under R4 for review; no discount was approved.` : 'No unapproved concession was made.');
+  items.push({ d: 1000, ev: ev(++step, 'notify_owner', { summary_en: summary }, { id: 'NOT-0001', owner: 'Vyom', summary_en: summary, created_at: new Date().toISOString(), status: 'recorded' }, 'completed') });
+  return items;
+}
+function mockTrace() {
+  // A complete mock run with synthetic timestamps, used by replay in mock mode.
+  const o = { ...MOCK_OUTCOME, transcript_lines: MOCK_CALL.filter(x => x.m.role).map(x => `${x.m.role}: ${x.m.content}`) };
+  let t = Date.now() - 120000;
+  const out = [];
+  for (const it of mockPhase1()) { t += it.d; if (it.ev.status !== 'running') out.push({ ...it.ev, ts: new Date(t).toISOString() }); }
+  t += MOCK_CALL.reduce((s, x) => s + x.d, 0);
+  for (const it of mockPhase2(o)) { t += it.d; out.push({ ...it.ev, ts: new Date(t).toISOString() }); }
+  return out;
+}
+
+/* ================= Receipt (built only from the event log) ================= */
+function renderReceipt(events, meta = {}) {
+  const done = t => doneOf(events, t);
+  const runId = events.find(e => e.run_id)?.run_id || '';
+  const rid = meta.id && /^#?K-/i.test(meta.id) ? String(meta.id).replace(/^#/, '') : `K-${hash5(runId || JSON.stringify(events))}`;
+  const stt = instructionEvent(events);
+  const khataEv = khataEvent(events);
+  const k = khataOf(khataEv);
+  const corrs = done('record_ledger_correction');
+  const pols = done('check_policy');
+  const awaiting = events.find(e => e.status === 'awaiting_conversation');
+  const resumed = events.find(e => e.tool === 'start_customer_conversation' && e.status === 'resumed');
+  const lines = events.filter(e => e.tool === 'call_transcript').map(e => parseLine(e.result?.line));
+  const commits = done('record_commitment');
+  const fols = done('schedule_followup');
+  const tasks = done('assign_task');
+  const notify = done('notify_owner').at(-1);
+  const errors = events.filter(e => e.status === 'error');
+  const firstTs = Date.parse(events[0]?.ts), lastTs = Date.parse(events.at(-1)?.ts);
+  const toolCalls = events.filter(e => isDone(e) && !['call_transcript', 'stt', 'extract'].includes(e.tool) && e.status !== 'resumed').length;
+  const final = errors.length ? ['text-rose-300', 'ERROR'] : notify ? ['text-emerald-300', 'COMPLETED'] : awaiting && !resumed ? ['text-amber-300', 'AWAITING CALL'] : ['text-sky-300', 'IN PROGRESS'];
+
+  const row = (label, body) => `<div class="r-row"><div class="eyebrow pt-0.5">${label}</div><div class="min-w-0 text-[13.5px] leading-relaxed text-slate-300">${body}</div></div>`;
+  const none = '<span class="text-slate-500">None recorded.</span>';
+
+  // Rules: from check_policy results and handoff rule ids — nothing else.
+  const rules = new Map();
+  for (const p of pols) {
+    const r = p.result || {};
+    if (r.rule_id) rules.set(r.rule_id, r.description || ruleGist(r));
+    for (const m of r.matched_rules || []) if (!rules.has(m)) rules.set(m, m === 'R6' ? 'No customer contact after 7 PM India time' : '');
+  }
+  for (const tk of tasks) { const id = tk.args?.rule_id || tk.result?.rule_id; if (id && !rules.has(id)) rules.set(id, inrText(tk.args?.reason || tk.result?.reason || '')); }
+
+  const changes = [];
+  const inv = done('get_ledger').at(-1)?.result?.invoices?.[0];
+  for (const c of corrs) {
+    const r = c.result || {};
+    changes.push([`${esc(c.args?.invoice_id || inv?.id || 'Invoice')} balance`, inr(r.before_balance), r.already_recorded ? `${inr(r.after_balance)} <span class="text-slate-500">(already recorded)</span>` : inr(r.after_balance), r.payment?.id || '']);
+  }
+  for (const c of commits) changes.push(['Payment commitment', '—', `${inr(c.result?.amount ?? c.args?.amount)} by ${esc(dayDate(c.result?.promised_date || c.args?.promised_date))}`, c.result?.id || '']);
+  for (const f of fols) changes.push(['Follow-up', '—', esc(dayDateTime(f.result?.datetime || f.args?.datetime)), f.result?.id || '']);
+  for (const tk of tasks) changes.push([`Task · ${esc(tk.result?.member_name || tk.args?.member_id)}`, '—', `${esc(tk.args?.rule_id || '')} · ${esc(tk.result?.status || 'assigned')}`, tk.result?.id || '']);
+  if (notify) changes.push(['Owner notification', '—', esc(notify.result?.status || 'recorded'), notify.result?.id || '']);
+
+  const o = resumed?.result || {};
+  const callBody = !awaiting ? '<span class="text-slate-500">No customer call in this run.</span>' : `
+    <div class="flex flex-wrap gap-2">
+      <span class="chip">${esc(langName(awaiting.args?.language || awaiting.result?.language))} · ${esc(awaiting.result?.contact || contactNameFrom(events))}</span>
+      ${resumed ? (o.promised_date ? `<span class="chip chip-emerald">Promised ${esc(dayDate(o.promised_date))}</span>` : '<span class="chip">No date given</span>') : '<span class="chip chip-amber">Awaiting outcome</span>'}
+      ${o.discount_requested ? `<span class="chip chip-amber">Asked ${inr(o.discount_amount)} discount — not approved</span>` : ''}
+      ${o.dispute ? `<span class="chip chip-rose">Disputed ${inr(o.disputed_amount)}</span>` : resumed ? '<span class="chip">No dispute</span>' : ''}
+    </div>
+    <div class="mt-2 text-xs text-slate-500">Objective: ${esc(awaiting.args?.objective || awaiting.result?.objective || '')}
+      ${resumed ? ` · call window ${duration(Date.parse(resumed.ts) - Date.parse(awaiting.ts))}` : ''}${lines.length ? ` · ${lines.length} transcript lines logged` : ''}</div>
+    ${lines.length ? `<details class="mt-2 text-xs"><summary class="cursor-pointer text-slate-400 hover:text-slate-200">Transcript</summary>
+      <ol class="mt-2 space-y-1.5">${lines.map(l => `<li><span class="${l.role === 'bot' ? 'text-emerald-300' : 'text-sky-300'} font-semibold uppercase tracking-wider text-[10px] mr-2">${l.role === 'bot' ? 'KAAM' : 'Customer'}</span>${esc(l.content)}</li>`).join('')}</ol></details>` : ''}`;
+
+  const html = `<div class="receipt panel rise px-6 pb-4 pt-7 sm:px-8">
+    <div class="flex flex-wrap items-start gap-4">
+      <div>
+        <div class="eyebrow">Proof of Work</div>
+        <div class="num mt-1 text-2xl font-semibold text-white sm:text-3xl">#${esc(rid)}</div>
+        <div class="num mt-1 text-[11px] text-slate-500">${esc([runId && `run ${runId}`, !isNaN(firstTs) && new Date(firstTs).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST'].filter(Boolean).join(' · '))}</div>
+      </div>
+      <div class="stamp ml-auto ${final[0]}">${final[1]}</div>
+    </div>
+    <div class="mt-6">
+      ${row('Instruction', stt ? `<span class="text-slate-100">“${esc(sttText(stt))}”</span>${stt.result?.language_code ? ` <span class="chip ml-1">${esc(langName(stt.result.language_code))}</span>` : ''}` : none)}
+      ${row('Evidence', khataEv || corrs.length ? `
+        ${khataEv ? `<div class="mb-2 text-xs text-slate-400">Khata page${k.customer ? ` · ${esc(k.customer)}` : ''} · ${khataEv.tool === 'extract' ? 'read by Sarvam Document AI' : 'supplied as JSON'}${k.confidence !== null ? ` · lowest field confidence <span class="num text-slate-200">${pct(k.confidence)}</span>` : ''}</div>
+        <div class="overflow-x-auto"><table class="t"><thead><tr><th>Date</th><th>Entry</th><th>Type</th><th class="text-right">Amount</th><th class="text-right">Confidence</th></tr></thead><tbody>
+          ${k.entries.map(x => `<tr><td class="num whitespace-nowrap">${esc(x.date || '')}</td><td>${esc(x.description || '')}</td><td>${esc(String(x.type || '').replace('_', ' '))}</td><td class="num text-right text-slate-100">${inr(x.amount)}</td><td class="num text-right">${pct(x.confidence)}</td></tr>`).join('')}
+        </tbody></table></div>` : ''}
+        ${corrs.map(c => `<div class="mt-2 text-xs text-slate-400">Applied to ledger: ${inr(c.args?.amount)} on ${esc(c.args?.date || '')} · source “${esc(c.args?.source || '')}” · <span class="num text-slate-200">${pct(c.args?.confidence)}</span> confidence</div>`).join('')}` : none)}
+      ${row('Rules applied', rules.size ? `<ul class="space-y-1.5">${[...rules].map(([id, d]) => `<li><span class="chip chip-violet mr-2">${esc(id)}</span>${esc(d)}</li>`).join('')}</ul>` : none)}
+      ${row('Call outcome', callBody)}
+      ${row('Changes', changes.length ? `<div class="overflow-x-auto"><table class="t"><thead><tr><th>Record</th><th>Before</th><th></th><th>After</th><th>Ref</th></tr></thead><tbody>
+          ${changes.map(([what, b, a, ref]) => `<tr><td class="text-slate-200">${what}</td><td class="num text-slate-500">${b}</td><td class="text-slate-600">→</td><td class="num text-slate-100">${a}</td><td class="num text-[11px] text-slate-500">${esc(ref)}</td></tr>`).join('')}
+        </tbody></table></div>` : none)}
+      ${row('Handoffs', tasks.length ? `<ul class="space-y-2">${tasks.map(tk => `<li class="flex flex-wrap items-center gap-2">
+          <span class="grid h-6 w-6 place-items-center rounded-full bg-violet-400/15 text-[11px] font-semibold text-violet-200">${esc(String(tk.result?.member_name || '?')[0])}</span>
+          <span class="text-slate-100">${esc(tk.result?.member_name || tk.args?.member_id)}</span><span class="chip chip-violet">${esc(tk.args?.rule_id || '')}</span>
+          <span>${esc(inrText(tk.args?.task || ''))}</span><span class="text-xs text-slate-500">due ${esc(dayDateTime(tk.result?.due_at || tk.args?.due_at))}</span></li>`).join('')}</ul>` : none)}
+      ${row('Final status', `<div class="flex flex-wrap items-center gap-2"><span class="font-semibold ${final[0]}">${final[1].charAt(0) + final[1].slice(1).toLowerCase()}</span>
+          <span class="text-xs text-slate-500">· ${toolCalls} tool calls · ${events.length} logged events${!isNaN(firstTs) && !isNaN(lastTs) ? ` · ${duration(lastTs - firstTs)} end to end` : ''}</span></div>
+        ${notify ? `<blockquote class="mt-3 border-l-2 border-emerald-400/40 pl-4 text-slate-200">${esc(inrText(notify.args?.summary_en || notify.result?.summary_en || ''))}
+          <div class="mt-1 text-xs text-slate-500">— sent to ${esc(notify.result?.owner || 'owner')} · ${esc(notify.result?.id || '')}</div></blockquote>` : ''}
+        ${errors.map(e => `<div class="mt-2 text-xs text-rose-300">${esc(e.tool)}: ${esc(errText(e.result?.error ?? e.result?.detail))}</div>`).join('')}`)}
+    </div>
+    <div class="mt-2 flex flex-wrap items-center gap-3 border-t border-white/5 pt-4 text-[11px] text-slate-500">
+      <span>Every line above is generated from the run's event log.</span>
+      <button id="copyLog" type="button" class="btn-ghost ml-auto">Copy event log (JSON)</button>
+    </div>
+  </div>`;
+  const box = $('receipt');
+  box.innerHTML = html;
+  box.hidden = false;
+  $('copyLog').onclick = async () => {
+    try { await navigator.clipboard.writeText(JSON.stringify(events, null, 2)); toast('Event log copied', 'ok'); }
+    catch (e) { toast(`Copy failed: ${e.message}`, 'error'); }
+  };
+  setTimeout(() => box.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350);
+}
+function contactNameFrom(events) {
+  return events.find(e => e.tool === 'find_customer' && isDone(e))?.result?.contact || 'customer';
+}
+
+/* ================= Replay (D or ?demo=1) ================= */
+async function replayLatest() {
+  let events;
+  if (MOCK) events = mockTrace();
+  else {
+    try {
+      const r = await fetch(API.trace, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`GET ${API.trace} → HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+      const j = await r.json();
+      events = Array.isArray(j) ? j : (j.events || j.trace?.events || j.run?.events || []);
+    } catch (e) { toast(`Replay unavailable: ${e.message}`, 'error'); return; }
+  }
+  if (!events.length) { toast('The saved trace has no events.', 'error'); return; }
+
+  resetRun();
+  enterRun('replay');
+  const t = S.token;
+  S.streamOpen = true; updateGhost();
+  let prevTs = null;
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    if (ev.tool === 'call_transcript') { enqueue(ev); continue; }
+    const ts = Date.parse(ev.ts);
+    let gap = prevTs !== null && !isNaN(ts) ? ts - prevTs : 500;
+    if (!isNaN(ts)) prevTs = ts;
+    gap = ev.status === 'resumed' ? 300 : Math.max(150, Math.min(gap, 6000));
+    await sleep(gap); if (t !== S.token) return;
+    enqueue(ev);
+    if (ev.status === 'awaiting_conversation') {
+      await S.chain; if (t !== S.token) return;
+      const lines = events.slice(i + 1).filter(e => e.tool === 'call_transcript').map(e => parseLine(e.result?.line));
+      const mockLines = MOCK ? MOCK_CALL.filter(x => x.m.role).map(x => x.m) : [];
+      handleCallMsg({ event: 'connected' });
+      for (const l of lines) {
+        await sleep(1700); if (t !== S.token) return;
+        handleCallMsg(mockLines.find(m => m.content === l.content) || l);
+      }
+      await sleep(1000); if (t !== S.token) return;
+      handleCallMsg({ event: 'interaction_end' });
+    }
+  }
+  await S.chain;
+  if (t === S.token) { S.streamOpen = false; updateGhost(); }
+}
+
+/* ================= View control ================= */
+function resetRun() {
+  S.token++;
+  if (S.abort) { S.abort.abort(); S.abort = null; }
+  if (S.call?.es) S.call.es.close();
+  stopCallTimer();
+  cancelAnimationFrame(S.balRaf);
+  Object.assign(S, { source: null, events: [], chain: Promise.resolve(), streamOpen: false, awaiting: null, call: null, finished: false, balShown: null });
+  $('timeline').innerHTML = ''; $('tlCount').textContent = ''; $('tlGhost').hidden = true;
+  for (const id of ['customerCard', 'invoiceCard', 'evidenceCard', 'teamGrid']) { $(id).innerHTML = ''; $(id)._html = ''; }
+  $('customerCard').hidden = $('invoiceCard').hidden = $('evidenceCard').hidden = true;
+  $('centreEmpty').hidden = false;
+  $('callPanel').hidden = true; $('callPlaceholder').hidden = false;
+  $('receipt').hidden = true; $('receipt').innerHTML = '';
+  $('instrText').textContent = 'Listening to the voice note…'; $('instrLang').hidden = true; $('runMeta').textContent = '';
+  renderTeam(); renderMetrics();
+}
+function enterRun(source) {
+  S.source = source;
+  $('idleView').hidden = true;
+  $('runView').hidden = false;
+  setRunStatus('running');
+  setMode(source === 'replay' ? 'replay' : MOCK ? 'mock' : 'live');
+  window.scrollTo({ top: 0 });
+}
+function showIdle() {
+  $('runView').hidden = true;
+  $('idleView').hidden = false;
+  setMode(MOCK ? 'mock' : 'live');
+}
+function setMode(m) {
+  const map = { mock: ['chip-amber', 'MOCK', 'Scripted demo — remove ?mock=1 to use the backend'], live: ['chip-emerald', 'LIVE', 'Connected to the KAAM backend'], replay: ['chip-sky', 'REPLAY', 'Replaying a saved run with its real timing'] };
+  const [cls, label, title] = map[m];
+  $('modeChip').className = `chip ${cls} hidden sm:inline-flex`;
+  $('modeChip').textContent = label;
+  $('modeChip').title = title;
+}
+
+async function startRun() {
+  if (MOCK) {
+    resetRun(); enterRun('mock');
+    playScript(mockPhase1(), S.token);
+    return;
+  }
+  if (!S.audio || !S.khataFile) return;
+  resetRun(); enterRun('live');
+  const fd = new FormData();
+  fd.append(FORM_FIELDS.audio, S.audio.blob, S.audio.name);
+  // main.py infers the image type from the extension, so make sure there is one.
+  const ext = S.khataFile.type === 'image/png' ? '.png' : '.jpg';
+  const imgName = /\.(png|jpe?g)$/i.test(S.khataFile.name) ? S.khataFile.name : `khata${ext}`;
+  fd.append(FORM_FIELDS.image, S.khataFile, imgName);
+  await streamPost(API.run, { body: fd });
+}
+
+async function resetDemo() {
+  if (!MOCK) {
+    try {
+      const r = await fetch(API.reset, { method: 'POST' });
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+    } catch (e) { toast(`Reset failed: ${e.message}`, 'error'); return; }
+  }
+  resetRun();
+  showIdle();
+  toast(MOCK ? 'Demo reset' : 'Demo data reset on the server', 'ok');
+}
+
+/* ================= Recording ================= */
+const R = { holding: false, rec: null, stream: null, chunks: [], t0: 0, tick: 0, autoStop: 0, ctx: null, raf: 0 };
+function setMicState(s) {
+  $('micWrap').dataset.state = s;
+  const label = { idle: 'Hold to speak', rec: 'Listening… release to finish', processing: 'Preparing audio…', ready: 'Voice note ready' }[s];
+  $('micLabel').textContent = label;
+  $('micBtn').setAttribute('aria-pressed', s === 'rec' ? 'true' : 'false');
+  if (s === 'idle') $('micMeta').innerHTML = 'or hold <kbd>Space</kbd> · max 30s';
+  if (s === 'ready' && S.audio) $('micMeta').textContent = `✓ ${S.audio.dur.toFixed(1)}s recorded · hold again to re-record`;
+  $('audioReady').hidden = s !== 'ready';
+}
+async function holdStart() {
+  if (R.holding || R.rec) return;
+  R.holding = true;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { R.holding = false; toast('This browser cannot record audio.', 'error'); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } }); }
+  catch (e) { R.holding = false; toast(`Microphone unavailable: ${e.name}: ${e.message}`, 'error'); return; }
+  R.stream = stream;
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'].find(m => MediaRecorder.isTypeSupported(m));
+  R.rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  R.chunks = [];
+  R.rec.ondataavailable = e => { if (e.data.size) R.chunks.push(e.data); };
+  R.rec.onstop = finishRecording;
+  R.rec.start();
+  R.t0 = performance.now();
+  setMicState('rec');
+  startMeter(stream);
+  R.tick = setInterval(() => { $('micMeta').textContent = `${((performance.now() - R.t0) / 1000).toFixed(1)}s / ${MAX_REC_S}s`; }, 100);
+  R.autoStop = setTimeout(holdEnd, MAX_REC_S * 1000);
+  if (!R.holding) holdEnd(); // released while the permission prompt was open
+}
+function holdEnd() {
+  R.holding = false;
+  if (R.rec && R.rec.state === 'recording') R.rec.stop();
+}
+async function finishRecording() {
+  clearInterval(R.tick); clearTimeout(R.autoStop); stopMeter();
+  R.stream?.getTracks().forEach(t => t.stop());
+  const dur = (performance.now() - R.t0) / 1000;
+  const type = R.rec.mimeType || 'audio/webm';
+  const blob = new Blob(R.chunks, { type });
+  R.rec = null;
+  if (dur < 0.6) { setMicState(S.audio ? 'ready' : 'idle'); toast('Hold the mic while you speak, then release.'); return; }
+  setMicState('processing');
+  let audio;
+  try { audio = { blob: await toWav16k(blob), name: 'instruction.wav', dur }; }
+  catch (e) {
+    console.warn('[KAAM] WAV conversion failed, sending original recording', e);
+    const ext = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
+    audio = { blob, name: `instruction.${ext}`, dur };
+  }
+  S.audio = audio;
+  setMicState('ready');
+  updateStart();
+}
+// Sarvam STT is happiest with WAV; convert the MediaRecorder output to 16 kHz mono PCM.
+async function toWav16k(blob) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  let decoded;
+  try { decoded = await ctx.decodeAudioData(await blob.arrayBuffer()); } finally { ctx.close(); }
+  const rate = 16000, len = Math.max(1, Math.ceil(decoded.duration * rate));
+  const off = new OfflineAudioContext(1, len, rate);
+  const src = off.createBufferSource(); src.buffer = decoded; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+  for (let i = 0; i < pcm.length; i++) { const s = Math.max(-1, Math.min(1, pcm[i])); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true); }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+function startMeter(stream) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    R.ctx = new AC();
+    const an = R.ctx.createAnalyser(); an.fftSize = 512;
+    R.ctx.createMediaStreamSource(stream).connect(an);
+    const data = new Uint8Array(an.fftSize);
+    const loop = () => {
+      an.getByteTimeDomainData(data);
+      let sum = 0; for (const x of data) { const d = (x - 128) / 128; sum += d * d; }
+      $('micWrap').style.setProperty('--lvl', Math.min(1, Math.sqrt(sum / data.length) * 4).toFixed(3));
+      R.raf = requestAnimationFrame(loop);
+    };
+    loop();
+  } catch { /* level meter is decorative */ }
+}
+function stopMeter() {
+  cancelAnimationFrame(R.raf);
+  $('micWrap').style.setProperty('--lvl', 0);
+  if (R.ctx) { R.ctx.close(); R.ctx = null; }
+}
+
+/* ================= Khata upload ================= */
+function setKhata(file) {
+  if (!file) return;
+  if (!/^image\/(png|jpeg)$/.test(file.type)) { toast('The khata photo must be a PNG or JPEG.', 'error'); return; }
+  if (S.khataUrl) URL.revokeObjectURL(S.khataUrl);
+  S.khataFile = file;
+  S.khataUrl = URL.createObjectURL(file);
+  $('khataImg').src = S.khataUrl;
+  $('khataName').textContent = `${file.name} · ${(file.size / 1024).toFixed(0)} KB`;
+  $('khataEmpty').hidden = true;
+  $('khataPreview').hidden = false;
+  updateStart();
+}
+function updateStart() {
+  const missing = [!S.audio && 'record the instruction', !S.khataFile && 'add the khata photo'].filter(Boolean);
+  $('startBtn').disabled = !MOCK && missing.length > 0;
+  $('startHint').textContent = MOCK
+    ? 'Mock mode: plays a scripted run with no backend. Recording and photo are optional.'
+    : missing.length ? `To start, ${missing.join(' and ')}.` : 'Ready. KAAM will transcribe, read the khata and get to work.';
+}
+
+/* ================= System status ================= */
+async function ping() {
+  const set = (ok, text) => {
+    $('sysStatus').classList.remove('hidden'); $('sysStatus').classList.add('sm:flex');
+    $('sysStatus').className = `hidden items-center gap-2 text-xs sm:flex ${ok ? 'text-emerald-300' : 'text-rose-300'}`;
+    $('sysText').textContent = text;
+  };
+  if (MOCK) { set(true, 'Systems online'); return; }
+  try {
+    const r = await fetch(API.ping, { cache: 'no-store' });
+    set(r.ok, r.ok ? 'Systems online' : `Backend error ${r.status}`);
+  } catch { set(false, 'Backend offline'); }
+}
+
+/* ================= Wiring ================= */
+function init() {
+  $('callWave').innerHTML = Array.from({ length: 32 }, (_, i) => `<span style="--h:${6 + Math.round(Math.abs(Math.sin(i * 1.7)) * 18)}px;animation-delay:${(i % 8) * 0.09}s"></span>`).join('');
+
+  const mic = $('micBtn');
+  mic.addEventListener('pointerdown', e => { e.preventDefault(); mic.setPointerCapture?.(e.pointerId); holdStart(); });
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) mic.addEventListener(t, holdEnd);
+  mic.addEventListener('contextmenu', e => e.preventDefault());
+  mic.addEventListener('keydown', e => { if ((e.key === 'Enter') && !e.repeat) { e.preventDefault(); holdStart(); } });
+  mic.addEventListener('keyup', e => { if (e.key === 'Enter') holdEnd(); });
+  $('audioPlay').onclick = () => { if (S.audio) new Audio(URL.createObjectURL(S.audio.blob)).play(); };
+  $('audioClear').onclick = () => { S.audio = null; setMicState('idle'); updateStart(); };
+
+  const drop = $('khataDrop');
+  $('khataInput').addEventListener('change', e => setKhata(e.target.files[0]));
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); setKhata(e.dataTransfer.files[0]); });
+
+  $('startBtn').onclick = startRun;
+  $('resetBtn').onclick = resetDemo;
+  $('ocForm').addEventListener('submit', e => { e.preventDefault(); submitOutcome(); });
+  $('ocDispute').addEventListener('change', e => { $('ocDisputeReason').hidden = !e.target.checked; });
+
+  const typing = t => t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  document.addEventListener('keydown', e => {
+    if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if ((e.key === 'd' || e.key === 'D') && !e.repeat) { e.preventDefault(); replayLatest(); }
+    if (e.code === 'Space' && !$('idleView').hidden) { e.preventDefault(); if (!e.repeat) holdStart(); }
+  });
+  document.addEventListener('keyup', e => { if (e.code === 'Space' && !$('idleView').hidden) { e.preventDefault(); holdEnd(); } });
+
+  setMode(MOCK ? 'mock' : 'live');
+  updateStart();
+  renderMetrics();
+  ping();
+  if (!MOCK) setInterval(ping, 20000);
+  if (params.get('demo') === '1') replayLatest();
+}
+init();
+</script>
+</body>
+</html>

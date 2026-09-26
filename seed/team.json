@@ -1,0 +1,20 @@
+[
+  {
+    "id": "T1",
+    "name": "Priya",
+    "role": "Finance Manager",
+    "handles": ["discounts", "30+ day overdue"]
+  },
+  {
+    "id": "T2",
+    "name": "Arjun",
+    "role": "Sales, owns Murugan Traders",
+    "handles": ["disputes", "relationship"]
+  },
+  {
+    "id": "T3",
+    "name": "Ravi",
+    "role": "Warehouse/Dispatch",
+    "handles": ["delivery issues", "damage claims"]
+  }
+]

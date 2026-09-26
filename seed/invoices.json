@@ -1,0 +1,10 @@
+[
+  {
+    "id": "INV-1042",
+    "customer_id": "C102",
+    "amount": 82500,
+    "invoice_date": "@TODAY-40D",
+    "due_date": "@TODAY-17D",
+    "status": "unpaid"
+  }
+]

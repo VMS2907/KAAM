@@ -1,0 +1,8 @@
+{
+  "R1": "0-7 days overdue: voice-note reminder only",
+  "R2": "8-30 days overdue: KAAM may speak with customer and get a payment date",
+  "R3": "More than 30 days overdue or balance over INR 100000: assign Finance Manager",
+  "R4": "Any discount request: KAAM cannot approve; assign Finance Manager with evidence",
+  "R5": "Dispute: split disputed and undisputed amounts; collect undisputed; route disputed to owners whose handles match",
+  "R6": "Never contact customers after 7 PM India time"
+}

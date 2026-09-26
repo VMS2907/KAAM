@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+python-multipart
+sarvamai
+python-dotenv
+sarvam-conv-ai-sdk[all]
